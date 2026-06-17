@@ -139,6 +139,7 @@ init_session()
 # ============================================================
 # Data Loading
 # ============================================================
+@st.cache_data(ttl=3600, show_spinner="正在生成演示数据并运行风险分析...")
 def load_demo_data():
     """Generate rich demo data with diverse attack patterns and sparse baseline."""
     random.seed(42)
