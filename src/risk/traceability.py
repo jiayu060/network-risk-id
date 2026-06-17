@@ -19,6 +19,7 @@ class TraceabilityGraph:
         if db_path is None:
             from pathlib import Path
             db_path = str(Path(__file__).parent.parent.parent / "data" / "state" / "traceability.db")
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self.db_path = db_path
         self.db = sqlite3.connect(db_path, check_same_thread=False)
         self.graph = nx.MultiDiGraph()
