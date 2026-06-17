@@ -111,6 +111,14 @@ class DetectionMetrics:
             "dga_activity": ["dga_activity"],
             "recon_scan": ["recon_scan"],
             "ransomware_pattern": ["ransomware_pattern", "c2_beacon"],
+            "credential_theft": ["credential_theft"],
+            "brute_force": ["brute_force", "credential_theft"],
+            "anti_forensics": ["anti_forensics"],
+            "persistence": ["persistence"],
+            "mitm_attack": ["mitm_attack"],
+            "tool_download": ["tool_download"],
+            "internal_recon": ["internal_recon"],
+            "privilege_escalation": ["privilege_escalation"],
         }
         return detected_type in type_map.get(injected_type, ["suspicious_activity"])
 

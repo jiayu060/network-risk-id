@@ -1,6 +1,6 @@
 """Streamlit dashboard — interactive network risk identification engine."""
 
-import sys, io, json, random, time, hashlib, uuid
+import sys, io, json, random, re, time, hashlib, uuid
 from pathlib import Path
 from collections import defaultdict, Counter
 from datetime import datetime, timezone
@@ -271,24 +271,74 @@ def run_pipeline_on_records(records: list[dict]):
         if r.get("src_ip") and r.get("dst_ip"):
             edge_summary[(r["src_ip"], r["dst_ip"])].append(r)
 
+    # Extract ground truth from user's annotated labels [攻击类型]
+    ground_truth = _extract_ground_truth(records)
+
     metrics = DetectionMetrics(match_threshold=0.6)
-    eval_results = metrics.evaluate([], results["chains"])
+    eval_results = metrics.evaluate(ground_truth, results["chains"])
 
     return {
         "records": records,
         "total_events": len(records),
-        "total_injected": 0,
+        "total_injected": len(ground_truth),
         "ip_scores": results["ip_scores"],
         "chains": results["chains"],
         "top_entities": results["top_entities"],
         "eval_results": eval_results,
         "graph_data": results["graph_data"],
         "dga_results": results["dga_results"],
-        "injected_attacks": [],
+        "injected_attacks": ground_truth,
         "entity_count": results["entity_count"],
         "edge_summary": dict(edge_summary),
         "source": "imported",
     }
+
+
+# Mapping from Chinese attack labels in brackets to chain_type
+_LABEL_TO_CHAIN_TYPE = {
+    "C2信标": "c2_beacon", "C2通信": "c2_beacon",
+    "横向移动": "lateral_movement",
+    "数据外泄": "data_exfil",
+    "DGA活动": "dga_activity",
+    "侦察扫描": "recon_scan",
+    "暴力破解": "brute_force",
+    "凭据访问": "credential_theft", "凭据窃取": "credential_theft",
+    "持久化": "persistence",
+    "反取证活动": "anti_forensics", "反取证": "anti_forensics",
+    "中间人攻击": "mitm_attack",
+    "内部侦察": "internal_recon",
+    "工具下载": "tool_download",
+    "防御规避": "anti_forensics",
+    "勒索软件": "ransomware_pattern",
+    "权限提升": "privilege_escalation",
+}
+
+
+def _extract_ground_truth(records: list[dict]) -> list:
+    """Extract annotated attack labels from log lines as InjectedAttack ground truth."""
+    from src.core.types import InjectedAttack
+
+    attacks = []
+    label_re = re.compile(r"\[([^\]]+)\]")  # extract [攻击类型]
+    for r in records:
+        raw = r.get("raw_message", "")
+        labels = label_re.findall(raw)
+        for label in labels:
+            chain_type = _LABEL_TO_CHAIN_TYPE.get(label)
+            if chain_type:
+                entities = []
+                if r.get("src_ip") and r["src_ip"] != "unknown":
+                    entities.append(r["src_ip"])
+                if r.get("dst_ip") and r["dst_ip"] != "unknown":
+                    entities.append(r["dst_ip"])
+                attacks.append(InjectedAttack(
+                    attack_id=r.get("event_id", str(uuid.uuid4())[:8]),
+                    attack_type=chain_type,
+                    entities=entities,
+                    start_time=r.get("timestamp", 0),
+                    end_time=r.get("timestamp", 0),
+                ))
+    return attacks
 
 def parse_log_text(log_text: str, source_type: str) -> list[dict]:
     """Parse a log text string into structured records. Auto-fallback to general parser."""
