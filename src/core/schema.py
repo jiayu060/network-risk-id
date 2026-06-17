@@ -48,6 +48,6 @@ EVENT_TYPE_TAXONOMY = {
     "suspicious_traffic": "Generic suspicious traffic",
 }
 
-SOURCE_TYPES = ["syslog", "etw", "waf", "dns"]
+SOURCE_TYPES = ["syslog", "etw", "waf", "dns", "general"]
 
 PROTOCOLS = ["TCP", "UDP", "ICMP", "HTTP", "HTTPS", "DNS", "TLS", "SMB", "RDP", "SSH", "FTP", "SMTP"]

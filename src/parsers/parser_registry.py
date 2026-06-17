@@ -5,6 +5,7 @@ from src.parsers.syslog_parser import SyslogParser
 from src.parsers.dns_parser import DNSParser
 from src.parsers.waf_parser import WAFParser
 from src.parsers.etw_parser import ETWParser
+from src.parsers.general_parser import GeneralSecurityLogParser
 
 
 class ParserRegistry:
@@ -15,6 +16,7 @@ class ParserRegistry:
         "dns": DNSParser,
         "waf": WAFParser,
         "etw": ETWParser,
+        "general": GeneralSecurityLogParser,
     }
 
     @classmethod

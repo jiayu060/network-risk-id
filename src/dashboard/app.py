@@ -117,6 +117,24 @@ SAMPLE_LOGS = {
         '<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><System><Provider Name="Microsoft-Windows-Sysmon"/><EventID>22</EventID><TimeCreated SystemTime="2024-06-15T09:25:00.000Z"/></System><EventData><Data Name="QueryName">xfgioklwq.net</Data></EventData></Event>',
         '<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><System><Provider Name="Microsoft-Windows-Sysmon"/><EventID>22</EventID><TimeCreated SystemTime="2024-06-15T09:25:10.000Z"/></System><EventData><Data Name="QueryName">rhwkqpmz.net</Data></EventData></Event>',
     ],
+    "general": [
+        '2026-06-17T08:12:34.221Z 10.2.15.88 -> 192.168.1.105:443 TLS handshake completed, JA3S=3b5074b1b5d032e5620f69f9f700ff4e, URI=/update/check?uid=7F3A2C, beacon interval=62s',
+        '2026-06-17T08:23:11.047Z 10.2.15.88 -> 192.168.1.105:443 POST /collect, data size 2847 bytes, beacon interval=65s',
+        '2026-06-17T08:45:22.198Z 10.2.15.100 -> 10.3.20.5:445 SMB2 TreeConnect \\\\10.3.20.5\\IPC$, user: Administrator, status=SUCCESS, EventID 4624 logon type 3',
+        '2026-06-17T08:49:30.112Z 10.2.15.100 -> 10.3.20.5:445 SMB2 Exec, service=RemoteRegistry, command=sc start WinUpdate, remote process creation Event 4688',
+        '2026-06-17T09:02:14.776Z 10.2.15.88 -> 193.42.187.34:53 DNS query for "d3f4ult-upd4te.xyz", response NXDOMAIN, qtype=A',
+        '2026-06-17T09:04:22.991Z 10.2.15.88 -> 193.42.187.34:53 DNS query for "a7k2m9p4q1r8.space", response 193.42.187.99, TTL=300',
+        '2026-06-17T09:06:45.112Z 10.2.15.88 -> 193.42.187.34:53 DNS query for "x9z8w7v6u5t4.top", response 193.42.187.100, high entropy domain',
+        '2026-06-17T09:15:08.443Z 10.2.15.200 -> 10.2.0.0/16: ICMP echo request ping sweep, 256 hosts scanned in 12s, response rate 23%',
+        '2026-06-17T09:17:33.821Z 10.2.15.200 -> 10.2.20.15:22 SSH banner grab, multiple SYN probes to port 22 across /24',
+        '2026-06-17T09:20:15.669Z 10.2.15.200 -> 10.2.30.5:445 SMB null session enumeration, port sweep 135-445, 2000+ packets/min',
+        '2026-06-17T09:35:42.502Z 10.2.15.88 -> 10.2.15.100:3389 RDP logon failure user "backup_admin", Event 4625, 5 attempts in 2 min',
+        '2026-06-17T09:38:19.886Z 10.2.15.88 -> 10.2.15.100:3389 RDP logon success user "backup_admin", Event 4624, unusual time weekend',
+        '2026-06-17T09:40:01.234Z 10.2.15.100 -> 193.42.187.99:443 HTTPS POST /exfil, bytes_out=1.2GB over 15 min, outbound traffic spike 450%',
+        '2026-06-17T09:50:22.113Z 10.2.15.100 -> 10.2.15.200:22 SSH reverse tunnel established, local port 2222 -> remote 192.168.1.105:443',
+        '2026-06-17T09:55:10.557Z 10.2.15.100 -> 10.2.15.200:135 DCE/RPC call, IFS interface, remote WMI execution Event 4698',
+        '2026-06-17T10:01:45.882Z 10.2.15.88 -> 8.8.8.8:53 DNS query for "windows-update-service.cf", response 193.42.187.101, beacon interval=4s, domain age 2 days',
+    ],
 }
 
 # ============================================================
@@ -620,7 +638,7 @@ if page == "📁 日志导入与分析":
         with c2:
             source_type = st.selectbox(
                 "日志格式",
-                ["syslog", "dns", "waf", "etw"],
+                ["syslog", "dns", "waf", "etw", "general"],
                 format_func=lambda x: {
                     "syslog": "Syslog (RFC 3164/5424)",
                     "dns": "DNS (BIND/Unbound)",
@@ -666,7 +684,7 @@ if page == "📁 日志导入与分析":
     with mode_tab2:
         paste_source = st.selectbox(
             "日志格式",
-            ["syslog", "dns", "waf", "etw"],
+            ["syslog", "dns", "waf", "etw", "general"],
             format_func=lambda x: x.upper(),
             key="paste_source_type"
         )
