@@ -22,7 +22,7 @@ class GeneralSecurityLogParser(LogParser):
 
     def __init__(self):
         self._ts_re = re.compile(
-            r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?)"
+            r"(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?)"
         )
         # src_ip -> dst_ip:port pattern
         self._conn_re = re.compile(
@@ -35,6 +35,17 @@ class GeneralSecurityLogParser(LogParser):
         self._ip_pair_re = re.compile(
             r"(\d+\.\d+\.\d+\.\d+)\s*->\s*(\d+\.\d+\.\d+\.\d+)"
         )
+        # "from X to Y" pattern (alternative format)
+        self._from_to_re = re.compile(
+            r"from\s+(\d+\.\d+\.\d+\.\d+)\s+to\s+(\d+\.\d+\.\d+\.\d+)",
+            re.IGNORECASE,
+        )
+        self._from_to_subnet_re = re.compile(
+            r"from\s+(\d+\.\d+\.\d+\.\d+)\s+to\s+(\d+\.\d+\.\d+\.\d+/\d+)",
+            re.IGNORECASE,
+        )
+        # Severity level [WARNING], [ALERT], [CRITICAL]
+        self._level_re = re.compile(r"\[(WARNING|ALERT|CRITICAL|INFO|ERROR)\]")
         # CIDR range
         self._cidr_re = re.compile(r"(\d+\.\d+\.\d+\.\d+/\d+)")
         # Port mentions
@@ -81,6 +92,10 @@ class GeneralSecurityLogParser(LogParser):
         event_type = "network_connect"
         raw = line.strip()
 
+        # ---- Severity from [LEVEL] ----
+        sev_match = self._level_re.search(line)
+        severity_label = sev_match.group(1) if sev_match else None
+
         # ---- IP extraction ----
         # Try "src -> dst:port" pattern first
         m = self._conn_re.search(line)
@@ -89,41 +104,59 @@ class GeneralSecurityLogParser(LogParser):
             dst_ip = m.group(2)
             dst_port = int(m.group(3))
         else:
-            # Try CIDR notation
+            # Try CIDR notation with ->
             m = self._conn_subnet_re.search(line)
             if m:
                 src_ip = m.group(1)
                 dst_ip = m.group(2)
                 dst_port = None
             else:
-                # Simple IP pair (no port)
+                # Simple IP pair with ->
                 m = self._ip_pair_re.search(line)
                 if m:
                     src_ip = m.group(1)
                     dst_ip = m.group(2)
                 else:
-                    # Try to extract any IPs
-                    ips = re.findall(r"(\d+\.\d+\.\d+\.\d+)", line)
-                    if len(ips) >= 2:
-                        src_ip = ips[0]
-                        dst_ip = ips[1]
-                    elif len(ips) == 1:
-                        src_ip = ips[0]
+                    # "from X to Y:port" pattern
+                    m = self._from_to_re.search(line)
+                    if m:
+                        src_ip = m.group(1)
+                        dst_ip = m.group(2)
+                    else:
+                        # "from X to Y/subnet" pattern
+                        m = self._from_to_subnet_re.search(line)
+                        if m:
+                            src_ip = m.group(1)
+                            dst_ip = m.group(2)
+                        else:
+                            # Try to extract any IPs
+                            ips = re.findall(r"(\d+\.\d+\.\d+\.\d+)", line)
+                            if len(ips) >= 2:
+                                src_ip = ips[0]
+                                dst_ip = ips[1]
+                            elif len(ips) == 1:
+                                src_ip = ips[0]
 
         # Port extraction from broader context if not already found
         if dst_port is None:
+            # CIDR notations have no port
+            if dst_ip and "/" in dst_ip:
+                dst_port = None
             # Try port after colon pattern after dst_ip
-            if dst_ip:
+            elif dst_ip:
                 m2 = re.search(rf"{re.escape(dst_ip)}:(\d{{1,5}})", line)
                 if m2:
                     dst_port = int(m2.group(1))
-            if dst_port is None:
-                m2 = self._port_re.search(line)
-                if m2:
-                    p = int(m2.group(1))
-                    # Only use if it looks like a real port, not a timestamp part
-                    if 1 <= p <= 65535:
-                        dst_port = p
+            # Fallback: find port-like numbers NOT in timestamps
+            if dst_port is None and dst_ip:
+                # Only search after '->' or 'to' pattern to avoid timestamp ports
+                idx = max(line.find("->"), line.find(" to "))
+                if idx > 0:
+                    m2 = self._port_re.search(line[idx:])
+                    if m2:
+                        p = int(m2.group(1))
+                        if 1 <= p <= 65535:
+                            dst_port = p
             if dst_port is None:
                 m2 = self._multi_port_re.search(line)
                 if m2:
@@ -147,12 +180,34 @@ class GeneralSecurityLogParser(LogParser):
         if m:
             domain = m.group(1)
         else:
-            # Fallback: find domain-like strings
+            # Fallback: find domain-like strings in quotes
             m = self._domain_simple_re.search(line)
             if m:
                 cand = m.group(1)
                 if "." in cand and not re.match(r"^\d+\.\d+\.\d+\.\d+$", cand):
                     domain = cand
+        # Domain as destination in "from X to domain" or "to domain"
+        if not domain and dst_ip and not re.match(r"^\d+\.\d+\.\d+\.\d+", dst_ip):
+            # dst_ip might actually be a domain name
+            if "." in dst_ip and re.search(r"[a-zA-Z]", dst_ip):
+                domain = dst_ip
+                dst_ip = None
+        # Domains mentioned inline: "domain xxx.com", "queried xxx.com", "matches xxx DGA"
+        if not domain:
+            m = re.search(r"(?:domain\s+|queried\s+|matches\s+|to\s+)([a-z0-9][a-z0-9.-]*\.[a-z]{2,})", line, re.IGNORECASE)
+            if m:
+                domain = m.group(1)
+        # Generic domain pattern: high-entropy-looking .xyz/.club/.space/.biz/.info/.top domains
+        if not domain:
+            m = re.search(r"([a-z0-9]{10,30}\.(?:xyz|club|space|biz|info|top|com|org|net))\b", line, re.IGNORECASE)
+            if m:
+                domain = m.group(1)
+
+        # Port extraction: "to IP:port" in from-to format
+        if dst_port is None and dst_ip:
+            m2 = re.search(r"to\s+" + re.escape(dst_ip) + r":(\d{1,5})", line)
+            if m2:
+                dst_port = int(m2.group(1))
 
         # ---- User ----
         for ure in [self._user_re, self._user_re2, self._user_re3]:
@@ -163,9 +218,13 @@ class GeneralSecurityLogParser(LogParser):
 
         # ---- Event type ----
         text_lower = line.lower()
-        if "dns query" in text_lower or ("dns" in text_lower and "query" in text_lower):
+        if "dns query" in text_lower or ("dns" in text_lower and "query" in text_lower) or "dns tunnel" in text_lower:
+            event_type = "dns_query"
+        elif "dga" in text_lower or "domain generation" in text_lower:
             event_type = "dns_query"
         elif "auth_success" in text_lower or "logon success" in text_lower or "login success" in text_lower:
+            event_type = "auth_success"
+        elif "pass-the-hash" in text_lower or "ntlm hash" in text_lower:
             event_type = "auth_success"
         elif "auth_failure" in text_lower or "logon failure" in text_lower or "login fail" in text_lower or "failed password" in text_lower:
             event_type = "auth_failure"
@@ -189,9 +248,21 @@ class GeneralSecurityLogParser(LogParser):
             event_type = "file_delete"
         elif "process creat" in text_lower or "process_start" in text_lower:
             event_type = "process_create"
-        elif "waf" in text_lower or "alert" in text_lower:
+        elif "waf" in text_lower and "alert" in text_lower:
             event_type = "waf_alert"
+        elif "scheduled task" in text_lower or "schtasks" in text_lower:
+            event_type = "process_create"
+        elif "lsass" in text_lower or "credential dump" in text_lower or "procdump" in text_lower:
+            event_type = "process_create"
+        elif "smb enumeration" in text_lower or "port scan" in text_lower:
+            event_type = "network_connect"
+        elif "c2 beacon" in text_lower or "cobalt strike" in text_lower or "beacon interval" in text_lower:
+            event_type = "network_connect"
+        elif "persistent connection" in text_lower:
+            event_type = "network_connect"
         elif "icmp" in text_lower:
+            event_type = "network_connect"
+        elif "ftp" in text_lower:
             event_type = "network_connect"
         elif "http" in text_lower and ("post" in text_lower or "get " in text_lower):
             event_type = "http_request"
@@ -220,7 +291,11 @@ class GeneralSecurityLogParser(LogParser):
             if m:
                 dst_ip = m.group(1)
 
-        # Build record
+        # Build record - use parsed severity label if available
+        severity = self._infer_severity(line)
+        if severity_label:
+            sev_map = {"CRITICAL": 10, "ALERT": 9, "WARNING": 7, "ERROR": 8, "INFO": 4}
+            severity = sev_map.get(severity_label, severity)
         record = {
             "event_id": str(uuid.uuid4())[:16],
             "timestamp": ts,
@@ -233,7 +308,7 @@ class GeneralSecurityLogParser(LogParser):
             "dst_port": dst_port,
             "proto": proto or "TCP",
             "event_type": event_type,
-            "severity": self._infer_severity(line),
+            "severity": severity,
             "user": user,
             "process_name": None,
             "process_id": None,
@@ -255,10 +330,14 @@ class GeneralSecurityLogParser(LogParser):
         return record
 
     def _extract_timestamp(self, line: str) -> int:
-        """Extract ISO 8601 timestamp and convert to millisecond epoch."""
+        """Extract ISO 8601 timestamp and convert to millisecond epoch.
+        Handles both 'T' and space separators: 2026-06-17T19:30:01.234Z or 2026-06-17 14:09:24
+        """
         m = self._ts_re.search(line)
         if m:
             ts_str = m.group(1).rstrip("Z")
+            # Normalize space to T for parsing
+            ts_str = ts_str.replace(" ", "T")
             try:
                 if "." in ts_str:
                     dt = datetime.strptime(ts_str, "%Y-%m-%dT%H:%M:%S.%f")

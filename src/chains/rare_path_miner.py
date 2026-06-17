@@ -80,20 +80,21 @@ class RarePathMiner:
             if node_risk < 0.6:  # Only high-risk nodes warrant C2/exfil classification
                 continue
             for neighbor in graph.successors(node):
-                if is_internal_ip(neighbor) or neighbor.startswith(("8.8.", "1.1.", "9.9.")):
+                # Skip internal IPs
+                if is_internal_ip(neighbor):
                     continue
+                # Skip CIDR notation (subnet scan targets, handled by recon_scan)
+                if "/" in neighbor:
+                    continue
+                # Skip well-known DNS resolvers only for non-DNS edges
+                is_dns_resolver = neighbor.startswith(("8.8.", "1.1.", "9.9."))
                 # External/rare target found
                 for key in graph[node][neighbor]:
                     ed = graph[node][neighbor][key]
                     etype = ed.get("edge_type", "unknown")
-                    if etype not in ("network", "dns"):
-                        continue
-                    event_count = ed.get("event_count", 1)
-                    bytes_out_max = ed.get("bytes_out", 0) or 0
-                    ports = ed.get("ports", set())
-                    if isinstance(ports, list):
-                        ports = set(ports)
+                    # DNS edges: allow DGA detection even via known resolvers
                     if etype == "dns":
+                        event_count = ed.get("event_count", 1)
                         chain = self._path_to_chain(
                             graph, [node, neighbor],
                             [(node, neighbor, etype, key)],
@@ -102,13 +103,22 @@ class RarePathMiner:
                         if chain:
                             chain.chain_type = "dga_activity"
                             chains.append(chain)
-                    else:
-                        huge_transfer = bytes_out_max > 100_000_000
-                        non_standard = [p for p in ports if p not in (80, 443, 53)]
-                        # C2 beacon when periodic (3+ events) on standard ports,
-                        # even if some other record on same edge had large transfer
-                        has_beacon = event_count >= 3 and not non_standard
-                        should_exfil = huge_transfer or non_standard
+                        continue
+                    if etype not in ("network",):
+                        continue
+                    if is_dns_resolver:
+                        continue
+                    event_count = ed.get("event_count", 1)
+                    bytes_out_max = ed.get("bytes_out", 0) or 0
+                    ports = ed.get("ports", set())
+                    if isinstance(ports, list):
+                        ports = set(ports)
+                    huge_transfer = bytes_out_max > 100_000_000
+                    non_standard = [p for p in ports if p not in (80, 443, 53)]
+                    # C2 beacon when periodic (3+ events) on standard ports,
+                    # even if some other record on same edge had large transfer
+                    has_beacon = event_count >= 3 and not non_standard
+                    should_exfil = huge_transfer or non_standard
                         # Generate C2 beacon chain when periodic pattern exists
                         if has_beacon:
                             beacon_chain = self._path_to_chain(
@@ -162,6 +172,28 @@ class RarePathMiner:
                                 [(n1, n2, edge_type, key)],
                                 node_score,
                             )
+                            chains.append(chain)
+
+        # Brute force detection: auth edges with multiple failures
+        for node in graph.nodes:
+            node_risk = graph.nodes[node].get("risk_score", 0)
+            if node_risk < 0.4:
+                continue
+            for neighbor in graph.successors(node):
+                for key in graph[node][neighbor]:
+                    ed = graph[node][neighbor][key]
+                    if ed.get("edge_type") != "auth":
+                        continue
+                    auth_count = ed.get("event_count", 1)
+                    if auth_count >= 3:
+                        chain = self._path_to_chain(
+                            graph, [node, neighbor],
+                            [(node, neighbor, "auth", key)],
+                            max(node_risk, 0.5),
+                        )
+                        if chain:
+                            chain.chain_type = "brute_force"
+                            chain.description = f"Brute force: {auth_count} auth attempts from {node} to {neighbor}"
                             chains.append(chain)
 
         # Port scan aggregation: flag nodes with many distinct targets

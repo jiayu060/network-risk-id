@@ -40,6 +40,12 @@ _CHAIN_TEMPLATES = {
         "priority": 1,
         "desc": "Credential access: brute-force or credential dumping pattern detected",
     },
+    "brute_force": {
+        "phases": ["Credential Access"],
+        "mitre": ["T1110", "T1110.001", "T1110.003"],
+        "priority": 1,
+        "desc": "Brute force attack: repeated authentication failures against a target",
+    },
     "ransomware_pattern": {
         "phases": ["Impact", "Command & Control"],
         "mitre": ["T1486", "T1070", "T1485"],

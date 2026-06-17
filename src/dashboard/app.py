@@ -35,6 +35,7 @@ CHAIN_LABELS = {
     "anti_forensics": "反取证活动", "persistence": "持久化",
     "mitm_attack": "中间人攻击", "tool_download": "工具下载",
     "internal_recon": "内部侦察",
+    "brute_force": "暴力破解",
 }
 ROLE_LABELS = {"source": "攻击源", "pivot": "跳板节点", "target": "攻击目标", "C2_infra": "C2基础设施"}
 
