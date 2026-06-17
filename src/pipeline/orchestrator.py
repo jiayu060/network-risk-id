@@ -1,6 +1,7 @@
 """Unified pipeline orchestrator: parse → features → detect → chains → risk → report."""
 
 import json
+import re
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -92,6 +93,10 @@ class PipelineOrchestrator:
         scores = self.ensemble.score(X)
         entity_scores_raw = {entity_list[i]: float(scores[i]) for i in range(len(entity_list))}
 
+        # ---- Step 2.5: Rule-based score boosting for small datasets ----
+        if total < 200:
+            entity_scores_raw = self._apply_rule_scoring(records, entity_scores_raw)
+
         # Aggregate per-IP scores
         ip_scores = {}
         for eid, s in entity_scores_raw.items():
@@ -152,6 +157,124 @@ class PipelineOrchestrator:
             "graph_data": tg.to_dict(),
             "report": report,
         }
+
+    def _apply_rule_scoring(self, records: list[dict],
+                             entity_scores_raw: dict) -> dict:
+        """Boost risk scores using rule-based heuristics for small datasets."""
+        import math
+        from collections import Counter
+
+        # Per-IP evidence collection
+        ip_evidence = defaultdict(lambda: {"score": 0.0, "count": 0, "reasons": []})
+        ip_connections = defaultdict(set)
+        ip_domains = defaultdict(list)
+        ip_bytes = defaultdict(int)
+        ip_auth_failures = defaultdict(int)
+        ip_scan_targets = defaultdict(set)
+
+        for r in records:
+            src = r.get("src_ip", "")
+            dst = r.get("dst_ip", "")
+            evt = r.get("event_type", "")
+            domain = r.get("domain", "")
+            raw = r.get("raw_message", "")
+            port = r.get("dst_port")
+
+            if src and src != "unknown":
+                if dst and dst != "unknown":
+                    ip_connections[src].add(dst)
+                if domain:
+                    ip_domains[src].append(domain)
+                ip_bytes[src] += r.get("bytes_out") or 0
+
+                if evt == "auth_failure":
+                    ip_auth_failures[src] += 1
+
+                if port:
+                    ip_scan_targets[src].add(f"{dst}:{port}")
+
+        for r in records:
+            src = r.get("src_ip", "")
+            raw = r.get("raw_message", "").lower()
+            dst = r.get("dst_ip", "")
+            if not src or src == "unknown":
+                continue
+            ev = ip_evidence[src]
+
+            # CIDR scan pattern in raw message
+            if re.search(r"\d+\.\d+\.\d+\.\d+/\d+", raw) or any(kw in raw for kw in ("ping sweep", "scan", "sweep", "probe", "enumeration")):
+                ev["score"] += 0.85
+                ev["reasons"].append("扫描/探测行为")
+
+            # DGA: high-entropy domains
+            domain = r.get("domain", "")
+            if domain:
+                entropy = self._domain_entropy(domain)
+                if entropy > 3.0:
+                    ev["score"] += 0.6
+                    ev["reasons"].append(f"高熵域名({domain})")
+
+            # Large data transfer
+            bo = r.get("bytes_out") or 0
+            if bo > 100_000_000:
+                ev["score"] += 0.8
+                ev["reasons"].append(f"大流量外传({bo/1e9:.1f}GB)")
+            elif bo > 1_000_000:
+                ev["score"] += 0.4
+                ev["reasons"].append(f"中流量外传({bo/1e6:.0f}MB)")
+
+            # Brute force / auth failure
+            if r.get("event_type") == "auth_failure":
+                ev["auth_failures"] = ev.get("auth_failures", 0) + 1
+
+            # Beacon interval mentioned
+            if "beacon interval" in raw or "interval=" in raw or "periodic" in raw:
+                ev["score"] += 0.7
+                ev["reasons"].append("周期性信标模式")
+
+            # Reverse tunnel / persistence
+            if any(kw in raw for kw in ("reverse tunnel", "reverse shell", "ssh tunnel", "persistence", "wmi execution")):
+                ev["score"] += 0.8
+                ev["reasons"].append("持久化/隧道行为")
+
+            # SMB exec / lateral movement indicator
+            if any(kw in raw for kw in ("smb2 exec", "smb2 create", "treeconnect", "dce/rpc", "wmi")):
+                ev["score"] += 0.7
+                ev["reasons"].append("横向移动特征")
+
+            # Credential access
+            if any(kw in raw for kw in ("sam", "lsass", "credential", "mimikatz", "ntds.dit", "系统配置")):
+                ev["score"] += 0.8
+                ev["reasons"].append("凭据访问特征")
+
+        # Post-process: aggregate auth failures
+        for ip, ev in ip_evidence.items():
+            fails = ev.pop("auth_failures", 0)
+            if fails >= 3:
+                ev["score"] += 0.75
+                ev["reasons"].append(f"暴力破解({fails}次登录失败)")
+
+        # Merge rule scores into entity scores
+        result = dict(entity_scores_raw)
+        for eid, score in list(result.items()):
+            ip = eid.split(":")[0] if ":" in eid else eid
+            if ip in ip_evidence and ip_evidence[ip]["score"] > 0:
+                rule_score = min(ip_evidence[ip]["score"], 1.0)
+                result[eid] = max(score, rule_score)
+
+        return result
+
+    @staticmethod
+    def _domain_entropy(domain: str) -> float:
+        """Shannon entropy of the domain label."""
+        import math
+        from collections import Counter
+        label = domain.split(".")[0] if "." in domain else domain
+        if not label:
+            return 0.0
+        n = len(label)
+        counts = Counter(label)
+        return -sum((c / n) * math.log2(c / n) for c in counts.values())
 
     def run_from_files(self, input_dir: str, source_type: str) -> dict:
         """Parse log files then run the full pipeline."""

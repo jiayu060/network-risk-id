@@ -98,13 +98,16 @@ class RarePathMiner:
                         max(node_risk, 0.5),
                     )
                     if chain:
-                        # Non-standard ports → data exfil
-                        # Standard ports (80, 443) → C2 beacon (periodic callback pattern)
-                        non_standard = [p for p in ports if p not in (80, 443)]
-                        if non_standard:
-                            chain.chain_type = "data_exfil"
+                        if etype == "dns":
+                            chain.chain_type = "dga_activity"
                         else:
-                            chain.chain_type = "c2_beacon"
+                            # Check data volume: large transfer → data_exfil
+                            huge_transfer = ed.get("bytes_out", 0) > 100_000_000 or ed.get("event_count", 0) > 20
+                            non_standard = [p for p in ports if p not in (80, 443, 53)]
+                            if huge_transfer or non_standard:
+                                chain.chain_type = "data_exfil"
+                            else:
+                                chain.chain_type = "c2_beacon"
                         chains.append(chain)
 
         # Fallback: direct connections between high-anomaly nodes with rare edges

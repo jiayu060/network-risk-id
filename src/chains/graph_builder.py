@@ -95,6 +95,7 @@ class TemporalGraph:
                     edge_type=edge_label,
                     risk_score=0.0,
                     event_count=0,
+                    bytes_out=0,
                     first_seen=timestamp,
                     last_seen=timestamp,
                     ports=set(),
@@ -104,6 +105,8 @@ class TemporalGraph:
             edge_data["event_count"] += 1
             edge_data["last_seen"] = max(edge_data["last_seen"], timestamp)
             edge_data["first_seen"] = min(edge_data["first_seen"], timestamp)
+            if record.get("bytes_out"):
+                edge_data["bytes_out"] += record["bytes_out"]
             if dst_port:
                 edge_data["ports"].add(dst_port)
             if proto:

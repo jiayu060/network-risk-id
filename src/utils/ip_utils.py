@@ -39,7 +39,13 @@ def is_private_ip(ip_str: str) -> bool:
 
 
 def is_internal_ip(ip_str: str) -> bool:
-    """Alias for is_private_ip."""
+    """Alias for is_private_ip. Handles CIDR notation."""
+    if "/" in ip_str:
+        try:
+            net = ipaddress.ip_network(ip_str, strict=False)
+            return is_private_ip(str(net.network_address))
+        except ValueError:
+            return False
     return is_private_ip(ip_str)
 
 

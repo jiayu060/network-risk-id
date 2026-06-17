@@ -82,9 +82,10 @@ class LateralMovementDetector:
                             if chain:
                                 chains.append(chain)
 
-        # Sort by risk score and limit output to prevent overwhelming FP
+        # Sort by risk score, filter zero-score chains, limit output
+        chains = [c for c in chains if c.total_risk_score > 0.1]
         chains.sort(key=lambda c: c.total_risk_score, reverse=True)
-        return chains[:50]
+        return chains[:30]
 
     def _is_suspicious_auth(self, auth_edge: dict, timestamp: int) -> bool:
         """Check if an auth event has suspicious characteristics."""
@@ -113,7 +114,7 @@ class LateralMovementDetector:
 
         nodes = [
             ChainNode(entity=src, entity_type="ip", role="source",
-                      risk_score=0.0),
+                      risk_score=auth_edge.get("risk_score", 0)),
             ChainNode(entity=pivot, entity_type="ip", role="pivot",
                       risk_score=auth_edge.get("risk_score", 0)),
             ChainNode(entity=dst, entity_type="ip", role="target",
@@ -133,12 +134,14 @@ class LateralMovementDetector:
                       anomalous_score=conn_edge.get("risk_score", 0)),
         ]
 
-        # Aggregate risk
+        # Aggregate risk: use max of all risk signals, floor at 0.5 for valid patterns
         risk_score = max(
             auth_edge.get("risk_score", 0),
             conn_edge.get("risk_score", 0),
         )
-        confidence = risk_score * 0.9  # pattern-based boost
+        if risk_score < 0.1:
+            risk_score = 0.5  # pattern-based floor for valid lateral movement
+        confidence = risk_score * 0.9
 
         return AttackChain(
             chain_id=chain_id,
