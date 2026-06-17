@@ -290,7 +290,7 @@ def run_pipeline_on_records(records: list[dict]):
     }
 
 def parse_log_text(log_text: str, source_type: str) -> list[dict]:
-    """Parse a log text string into structured records."""
+    """Parse a log text string into structured records. Auto-fallback to general parser."""
     from src.parsers.parser_registry import ParserRegistry
     parser = ParserRegistry.get_parser(source_type)
     records = []
@@ -300,10 +300,28 @@ def parse_log_text(log_text: str, source_type: str) -> list[dict]:
             continue
         try:
             r = parser.parse_line(line)
-            if r:
+            if r and r.get("src_ip") and r["src_ip"] != "unknown":
                 records.append(r)
         except Exception:
             pass
+
+    # If the specific parser failed to extract useful records, auto-fallback to general
+    if len(records) == 0 and source_type != "general":
+        try:
+            general = ParserRegistry.get_parser("general")
+            for line in log_text.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    r = general.parse_line(line)
+                    if r and r.get("src_ip") and r["src_ip"] != "unknown":
+                        records.append(r)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
     return records
 
 # ============================================================
