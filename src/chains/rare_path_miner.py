@@ -1,6 +1,7 @@
 """Rare path mining: BFS-based attack chain discovery in communication graphs."""
 
 import math
+import re
 import uuid
 from collections import defaultdict
 
@@ -119,37 +120,37 @@ class RarePathMiner:
                     # even if some other record on same edge had large transfer
                     has_beacon = event_count >= 3 and not non_standard
                     should_exfil = huge_transfer or non_standard
-                        # Generate C2 beacon chain when periodic pattern exists
-                        if has_beacon:
-                            beacon_chain = self._path_to_chain(
-                                graph, [node, neighbor],
-                                [(node, neighbor, etype, key)],
-                                max(node_risk, 0.5),
-                            )
-                            if beacon_chain:
-                                beacon_chain.chain_type = "c2_beacon"
-                                chains.append(beacon_chain)
-                        # Generate data exfil chain when large transfer or non-standard ports
-                        if should_exfil:
-                            exfil_chain = self._path_to_chain(
-                                graph, [node, neighbor],
-                                [(node, neighbor, etype, key)],
-                                max(node_risk, 0.6),
-                            )
-                            if exfil_chain:
-                                exfil_chain.chain_type = "data_exfil"
-                                chains.append(exfil_chain)
-                        # Fallback: neither clear beacon nor clear exfil → default c2_beacon
-                        # Data exfil is already caught by should_exfil (huge bytes / non-standard ports)
-                        if not has_beacon and not should_exfil:
-                            chain = self._path_to_chain(
-                                graph, [node, neighbor],
-                                [(node, neighbor, etype, key)],
-                                max(node_risk, 0.5),
-                            )
-                            if chain:
-                                chain.chain_type = "c2_beacon"
-                                chains.append(chain)
+                    # Generate C2 beacon chain when periodic pattern exists
+                    if has_beacon:
+                        beacon_chain = self._path_to_chain(
+                            graph, [node, neighbor],
+                            [(node, neighbor, etype, key)],
+                            max(node_risk, 0.5),
+                        )
+                        if beacon_chain:
+                            beacon_chain.chain_type = "c2_beacon"
+                            chains.append(beacon_chain)
+                    # Generate data exfil chain when large transfer or non-standard ports
+                    if should_exfil:
+                        exfil_chain = self._path_to_chain(
+                            graph, [node, neighbor],
+                            [(node, neighbor, etype, key)],
+                            max(node_risk, 0.6),
+                        )
+                        if exfil_chain:
+                            exfil_chain.chain_type = "data_exfil"
+                            chains.append(exfil_chain)
+                    # Fallback: neither clear beacon nor clear exfil → default c2_beacon
+                    # Data exfil is already caught by should_exfil (huge bytes / non-standard ports)
+                    if not has_beacon and not should_exfil:
+                        chain = self._path_to_chain(
+                            graph, [node, neighbor],
+                            [(node, neighbor, etype, key)],
+                            max(node_risk, 0.5),
+                        )
+                        if chain:
+                            chain.chain_type = "c2_beacon"
+                            chains.append(chain)
 
         # Internal→internal attack detection (data exfil to internal drop, lateral movement, internal recon)
         for node in graph.nodes:
@@ -213,11 +214,11 @@ class RarePathMiner:
                             max(node_risk, 0.5),
                         )
                         if chain:
-                            # DGA: high-entropy-looking domains to external resolvers
-                            if "/" in neighbor or "." in neighbor:
-                                chain.chain_type = "dga_activity"
-                            else:
+                            # DGA: domain name destinations (not IP addresses)
+                            if re.match(r"^\d+\.\d+\.\d+\.\d+$", neighbor) or "/" in neighbor:
                                 chain.chain_type = "internal_recon"
+                            else:
+                                chain.chain_type = "dga_activity"
                             chain.description = f"DNS anomaly: {node} querying {neighbor}"
                             chains.append(chain)
 
