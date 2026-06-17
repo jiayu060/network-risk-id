@@ -55,12 +55,17 @@ class GeneralSecurityLogParser(LogParser):
         )
         # "Domain X from IP" (DGA domain reported)
         self._domain_from_ip_re = re.compile(
-            r"(?:domain|host)\s+([a-z0-9][a-z0-9.-]*\.[a-z]{2,})\s+from\s+(\d+\.\d+\.\d+\.\d+)",
+            r"(?:domain|host)\s+([a-z0-9][a-z0-9.-]*\.[a-z]{2,})\s+(?:\w+\s+)?from\s+(\d+\.\d+\.\d+\.\d+)",
             re.IGNORECASE,
         )
         # "from IP to DOMAIN" (destination is domain, not IP)
         self._from_ip_to_domain_re = re.compile(
             r"from\s+(\d+\.\d+\.\d+\.\d+)\s+to\s+([a-z0-9][a-z0-9.-]*\.[a-z]{2,})",
+            re.IGNORECASE,
+        )
+        # "DNS query for DOMAIN from IP" (DNS-specific format)
+        self._query_for_from_re = re.compile(
+            r"query\s+for\s+([a-z0-9][a-z0-9.-]*\.[a-z]{2,})\s+from\s+(\d+\.\d+\.\d+\.\d+)",
             re.IGNORECASE,
         )
         # "on DST from SRC" (reverse with "on" instead of "to")
@@ -176,7 +181,13 @@ class GeneralSecurityLogParser(LogParser):
                             if m:
                                 domain = m.group(1)
                                 src_ip = m.group(2)
-                                dst_ip = domain  # Use domain as edge destination
+                                dst_ip = domain
+                            # "DNS query for DOMAIN from IP"
+                            elif self._query_for_from_re.search(line):
+                                m = self._query_for_from_re.search(line)
+                                domain = m.group(1)
+                                src_ip = m.group(2)
+                                dst_ip = domain
                             # "from IP to DOMAIN" (destination is domain name)
                             elif self._from_ip_to_domain_re.search(line):
                                 m = self._from_ip_to_domain_re.search(line)

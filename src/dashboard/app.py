@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 st.set_page_config(page_title="网络风险识别", page_icon="🛡️", layout="wide",
                    initial_sidebar_state="expanded")
 
-__version__ = "0.3.1"  # d00517a — internal detection + parser v2 fixes
+__version__ = "0.3.2"  # deterministic seed + raw-message edge fallback + debug panel
 
 # ============================================================
 # Chinese Labels
@@ -888,6 +888,38 @@ if page == "📁 日志导入与分析":
         st.write("**检测到的攻击类型**:")
         badges = " | ".join(f"`{CHAIN_LABELS.get(ct, ct)}` ×{cnt}" for ct, cnt in chain_types.most_common())
         st.write(badges if badges else "无明确攻击类型")
+
+    # Debug panel: show parsed records and graph edge types
+    with st.expander("🔧 调试信息 — 解析记录与图边类型", expanded=False):
+        records = res.get("records", [])
+        if records:
+            st.markdown("**解析记录 (event_type / src → dst / domain / bytes):**")
+            debug_rows = []
+            for i, r in enumerate(records):
+                debug_rows.append({
+                    "#": i+1,
+                    "事件类型": r.get("event_type", "?"),
+                    "源IP": str(r.get("src_ip", ""))[:18],
+                    "目标IP": str(r.get("dst_ip", ""))[:22],
+                    "端口": r.get("dst_port", ""),
+                    "域名": str(r.get("domain", "") or "")[:25],
+                    "流量": f"{r.get('bytes_out', 0) or 0 / 1e6:.1f}MB" if r.get("bytes_out") else "",
+                })
+            st.dataframe(pd.DataFrame(debug_rows), use_container_width=True, hide_index=True)
+
+        gdata = res.get("graph_data", {})
+        edges = gdata.get("edges", [])
+        if edges:
+            st.markdown(f"**图边类型分布 (共 {len(edges)} 条边):**")
+            edge_type_counts = Counter(e.get("edge_type", e.get("key", "?")) for e in edges)
+            et_rows = [{"边类型": et, "数量": cnt} for et, cnt in edge_type_counts.most_common()]
+            st.dataframe(pd.DataFrame(et_rows), use_container_width=True, hide_index=True)
+
+        scores = res.get("ip_scores", {})
+        if scores:
+            st.markdown("**IP 评分:**")
+            score_rows = [{"IP": ip, "评分": f"{s:.3f}"} for ip, s in sorted(scores.items(), key=lambda x: x[1], reverse=True)]
+            st.dataframe(pd.DataFrame(score_rows), use_container_width=True, hide_index=True)
 
     if st.button("🔄 恢复使用演示数据", key="reset_demo"):
         st.session_state.analysis_results = None

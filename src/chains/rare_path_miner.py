@@ -183,6 +183,7 @@ class RarePathMiner:
                             chains.append(chain)
 
                     # Internal lateral movement: auth edges or process-based remote exec
+                    # Brute force: 3+ auth failures → brute_force, not lateral_movement
                     if etype == "auth" and ec >= 1:
                         chain = self._path_to_chain(
                             graph, [node, neighbor],
@@ -190,8 +191,12 @@ class RarePathMiner:
                             max(node_risk, 0.5),
                         )
                         if chain:
-                            chain.chain_type = "lateral_movement"
-                            chain.description = f"Lateral movement: auth from {node} to {neighbor} ({ec} attempts)"
+                            if ec >= 3:
+                                chain.chain_type = "brute_force"
+                                chain.description = f"Brute force: {ec} auth attempts from {node} to {neighbor}"
+                            else:
+                                chain.chain_type = "lateral_movement"
+                                chain.description = f"Lateral movement: auth from {node} to {neighbor} ({ec} attempts)"
                             chains.append(chain)
 
                     # Process-based lateral movement: WMI, DCOM, PSExec

@@ -76,6 +76,7 @@ class TemporalGraph:
             raw = record.get("raw_message", "")
             dst_port = record.get("dst_port")
 
+            raw_lower = raw.lower() if raw else ""
             # Detect specific attack patterns from raw message content
             if edge_type in ("auth_success", "auth_failure"):
                 edge_label = "auth"
@@ -87,30 +88,49 @@ class TemporalGraph:
                 edge_label = "file"
             elif edge_type == "waf_alert":
                 edge_label = "http"
-            elif raw and any(kw in raw.lower() for kw in (
+            elif raw_lower and any(kw in raw_lower for kw in (
                     "sam", "system\\config", "ntds.dit", "memory.dmp", "lsass",
                     "credential", "kdbx", "shadow_copy", "mimikatz")):
                 edge_label = "credential_theft"
-            elif raw and any(kw in raw.lower() for kw in (
+            elif raw_lower and any(kw in raw_lower for kw in (
                     "evtx", "audit.log", "event log", "clear log", "security log",
                     "timestomp", "log tamper")):
                 edge_label = "anti_forensics"
-            elif raw and any(kw in raw.lower() for kw in (
+            elif raw_lower and any(kw in raw_lower for kw in (
                     "startup", "schtasks", "start menu\\programs\\startup",
                     "persistence", "registry run", "boot execute", "printnightmare")):
                 edge_label = "persistence"
-            elif raw and any(kw in raw.lower() for kw in (
+            elif raw_lower and any(kw in raw_lower for kw in (
                     "arp cache", "arp poison", "gratuitous arp", "mitm",
                     "ssl strip", "dns poison")):
                 edge_label = "mitm_attack"
-            elif raw and any(kw in raw.lower() for kw in (
+            elif raw_lower and any(kw in raw_lower for kw in (
                     "ftp retr", "sftp download", "tool download", "wget ",
                     "curl -o", "bitsadmin /transfer")):
                 edge_label = "tool_download"
-            elif raw and any(kw in raw.lower() for kw in (
+            elif raw_lower and any(kw in raw_lower for kw in (
                     "hosts file", "systeminfo", "net view", "net use",
                     "whoami", "ipconfig /all", "nltest")):
                 edge_label = "internal_recon"
+            # Fallback: classify from raw message content when parser gave no specific type
+            elif raw_lower and any(kw in raw_lower for kw in (
+                    "ssh", "login success", "login fail", "kerberos", "kerberoast",
+                    "tgs-req", "tgt", "pass-the-hash", "ntlm", "ldap bind",
+                    "ldap enum", "logon success", "logon fail", "auth_fail",
+                    "failed password", "brute force", "password spray",
+                    "key-based login", "public key")):
+                edge_label = "auth"
+            elif raw_lower and any(kw in raw_lower for kw in (
+                    "dns query", "dns tunnel", "dga", "domain generation",
+                    "dns zone", "dns txt", "txt record")):
+                edge_label = "dns"
+            elif raw_lower and any(kw in raw_lower for kw in (
+                    "process creat", "wmi process", "wmi creat", "dcom lateral",
+                    "psexec", "schtasks", "scheduled task",
+                    "uac bypass", "privilege escalation", "masquerading",
+                    "amsi bypass", "fileless", "memory-resident",
+                    "renamed as", "procdump", "lsass dump")):
+                edge_label = "process"
             else:
                 edge_label = "network"
 

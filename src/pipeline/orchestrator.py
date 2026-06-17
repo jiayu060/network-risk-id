@@ -50,6 +50,8 @@ class PipelineOrchestrator:
             chains, ip_scores, entity_profiles, top_entities, dga_results,
             edge_summary, total_events, entity_count, graph_data
         """
+        # Deterministic seed for reproducible results
+        np.random.seed(42)
         total = len(records)
 
         # ---- Step 1: Feature extraction ----
