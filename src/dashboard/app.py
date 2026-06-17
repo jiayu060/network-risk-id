@@ -756,6 +756,7 @@ if page == "📁 日志导入与分析":
                         st.session_state.analysis_results = data
                         st.session_state.imported_records = all_records
                         st.session_state.source_type = source_type
+                        st.session_state.raw_log_input = content[:5000]
                         st.session_state.data_source_name = f"导入: {', '.join(f.name for f in uploaded_files)}"
                         st.session_state.use_demo_data = False
                     st.success(f"✅ 分析完成！**{len(data['chains'])}** 条攻击链，**{sum(1 for s in data['ip_scores'].values() if s > 0.7)}** 个异常IP")
@@ -798,6 +799,7 @@ if page == "📁 日志导入与分析":
                         st.session_state.analysis_results = data
                         st.session_state.imported_records = records
                         st.session_state.source_type = paste_source
+                        st.session_state.raw_log_input = pasted_text
                         st.session_state.data_source_name = f"自定义 {paste_source.upper()} 日志 ({len(records)}条)"
                         st.session_state.use_demo_data = False
                     st.success(f"✅ 分析完成！**{len(data['chains'])}** 条攻击链")
@@ -891,9 +893,15 @@ if page == "📁 日志导入与分析":
 
     # Debug panel: show parsed records and graph edge types
     with st.expander("🔧 调试信息 — 解析记录与图边类型", expanded=False):
+        # Show raw input if available
+        raw_input = st.session_state.get("raw_log_input", "")
+        if raw_input:
+            st.markdown("**原始输入日志:**")
+            st.code(raw_input[:5000], language=None)
+
         records = res.get("records", [])
         if records:
-            st.markdown("**解析记录 (event_type / src → dst / domain / bytes):**")
+            st.markdown(f"**解析记录 (共 {len(records)} 条):**")
             debug_rows = []
             for i, r in enumerate(records):
                 debug_rows.append({
@@ -903,9 +911,11 @@ if page == "📁 日志导入与分析":
                     "目标IP": str(r.get("dst_ip", ""))[:22],
                     "端口": r.get("dst_port", ""),
                     "域名": str(r.get("domain", "") or "")[:25],
-                    "流量": f"{r.get('bytes_out', 0) or 0 / 1e6:.1f}MB" if r.get("bytes_out") else "",
+                    "流量": f"{r.get('bytes_out', 0) / 1e6:.1f}MB" if r.get("bytes_out") else "",
                 })
             st.dataframe(pd.DataFrame(debug_rows), use_container_width=True, hide_index=True)
+        else:
+            st.caption("无解析记录 (所有行的 src_ip 均为 unknown)")
 
         gdata = res.get("graph_data", {})
         edges = gdata.get("edges", [])
