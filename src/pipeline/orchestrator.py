@@ -227,8 +227,9 @@ class PipelineOrchestrator:
             if r.get("event_type") == "auth_failure":
                 ev["auth_failures"] = ev.get("auth_failures", 0) + 1
 
-            # Beacon interval mentioned
-            if "beacon interval" in raw or "interval=" in raw or "periodic" in raw:
+            # Beacon interval / C2 communication
+            if any(kw in raw for kw in ("beacon interval", "interval=", "periodic",
+                                         "c2 beacon", "cobalt strike", "command and control")):
                 ev["score"] += 0.7
                 ev["reasons"].append("周期性信标模式")
 

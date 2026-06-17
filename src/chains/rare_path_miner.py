@@ -139,7 +139,8 @@ class RarePathMiner:
                             if exfil_chain:
                                 exfil_chain.chain_type = "data_exfil"
                                 chains.append(exfil_chain)
-                        # Fallback: neither clear beacon nor clear exfil → classify by event count
+                        # Fallback: neither clear beacon nor clear exfil → default c2_beacon
+                        # Data exfil is already caught by should_exfil (huge bytes / non-standard ports)
                         if not has_beacon and not should_exfil:
                             chain = self._path_to_chain(
                                 graph, [node, neighbor],
@@ -147,7 +148,7 @@ class RarePathMiner:
                                 max(node_risk, 0.5),
                             )
                             if chain:
-                                chain.chain_type = "c2_beacon" if event_count >= 3 else "data_exfil"
+                                chain.chain_type = "c2_beacon"
                                 chains.append(chain)
 
         # Fallback: direct connections between high-anomaly nodes with rare edges
