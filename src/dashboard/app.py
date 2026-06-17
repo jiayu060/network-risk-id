@@ -17,6 +17,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 st.set_page_config(page_title="网络风险识别", page_icon="🛡️", layout="wide",
                    initial_sidebar_state="expanded")
 
+__version__ = "0.3.1"  # d00517a — internal detection + parser v2 fixes
+
 # ============================================================
 # Chinese Labels
 # ============================================================
@@ -667,6 +669,7 @@ data_badge = "📦" if st.session_state.get("use_demo_data", True) else "📁"
 st.sidebar.markdown(f"**当前数据源**: {data_badge} {current_source}")
 
 st.sidebar.markdown("---")
+st.sidebar.caption(f"🔧 引擎版本: {__version__}")
 
 # Navigation — placed directly below data source
 page = st.sidebar.radio(
