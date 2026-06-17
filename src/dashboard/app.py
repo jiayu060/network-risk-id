@@ -338,14 +338,37 @@ def _generate_pdf_report(data: dict, chains: list, ip_scores: dict,
     pdf = PDF()
     pdf.set_auto_page_break(True, 20)
 
-    # Add Chinese font
-    font_path = "C:/Windows/Fonts/simhei.ttf"
-    try:
-        pdf.add_font("SimHei", "", font_path, uni=True)
-    except Exception:
-        # Fallback: try msyh
-        font_path = "C:/Windows/Fonts/msyh.ttc"
-        pdf.add_font("SimHei", "", font_path, uni=True)
+    # Add Chinese font — try platform-specific paths, download as last resort
+    font_paths = [
+        "C:/Windows/Fonts/simhei.ttf",
+        "C:/Windows/Fonts/msyh.ttc",
+        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+        "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    ]
+    font_loaded = False
+    for fp in font_paths:
+        if Path(fp).exists():
+            pdf.add_font("SimHei", "", fp, uni=True)
+            font_loaded = True
+            break
+    if not font_loaded:
+        # Download Noto Sans SC font on the fly
+        import urllib.request, io as _io
+        font_url = "https://github.com/googlefonts/noto-cjk/releases/download/Sans2.004/03_NotoSansCJKsc.zip"
+        try:
+            req = urllib.request.urlopen(font_url, timeout=10)
+            data = _io.BytesIO(req.read())
+            import zipfile
+            with zipfile.ZipFile(data) as zf:
+                for name in zf.namelist():
+                    if name.endswith("Regular.otf"):
+                        font_data = _io.BytesIO(zf.read(name))
+                        pdf.add_font("SimHei", "", font_data, uni=True)
+                        font_loaded = True
+                        break
+        except Exception:
+            raise RuntimeError("无法加载中文字体，请使用JSON下载")
 
     pdf.add_page()
 
