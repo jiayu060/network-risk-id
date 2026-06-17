@@ -16,8 +16,8 @@ class TraceabilityGraph:
     """
 
     def __init__(self, db_path: str = None):
+        from pathlib import Path
         if db_path is None:
-            from pathlib import Path
             db_path = str(Path(__file__).parent.parent.parent / "data" / "state" / "traceability.db")
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self.db_path = db_path
