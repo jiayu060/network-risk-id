@@ -1,0 +1,47 @@
+[tool.poetry]
+name = "network-risk-id"
+version = "0.1.0"
+description = "海量日志数据的网络风险识别分析引擎"
+authors = ["Security Research Team"]
+readme = "README.md"
+packages = [{include = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+polars = "^1.0.0"
+pyarrow = ">=15.0.0"
+scikit-learn = ">=1.4.0"
+pyod = ">=2.0.0"
+hdbscan = ">=0.8.33"
+networkx = ">=3.2"
+torch = ">=2.2.0"
+fastapi = ">=0.110.0"
+uvicorn = ">=0.27.0"
+streamlit = ">=1.32.0"
+pydantic = ">=2.6.0"
+geoip2 = ">=4.8.0"
+omegaconf = ">=2.3.0"
+click = ">=8.1.0"
+structlog = ">=24.1.0"
+lxml = ">=5.1.0"
+plotly = ">=5.18.0"
+python-dateutil = ">=2.8.0"
+tqdm = ">=4.66.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8.0.0"
+pytest-benchmark = ">=4.0.0"
+ruff = ">=0.3.0"
+ipykernel = ">=6.29.0"
+jupyter = ">=1.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

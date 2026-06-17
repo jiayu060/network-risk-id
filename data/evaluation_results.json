@@ -1,0 +1,61 @@
+{
+  "results": {
+    "precision": 0.0714,
+    "recall": 1.0,
+    "f1": 0.1333,
+    "true_positives": 5,
+    "false_positives": 65,
+    "false_negatives": 0,
+    "total_injected": 5,
+    "total_detected": 70,
+    "per_type": {
+      "c2_beacon": {
+        "injected": 1,
+        "detected": 0,
+        "matched": 1,
+        "recall": 1.0,
+        "precision": 1.0
+      },
+      "lateral_movement": {
+        "injected": 1,
+        "detected": 21,
+        "matched": 1,
+        "recall": 1.0,
+        "precision": 0.0476
+      },
+      "data_exfil": {
+        "injected": 1,
+        "detected": 0,
+        "matched": 1,
+        "recall": 1.0,
+        "precision": 1.0
+      },
+      "dga_activity": {
+        "injected": 1,
+        "detected": 0,
+        "matched": 1,
+        "recall": 1.0,
+        "precision": 1.0
+      },
+      "recon_scan": {
+        "injected": 1,
+        "detected": 49,
+        "matched": 1,
+        "recall": 1.0,
+        "precision": 0.0204
+      }
+    }
+  },
+  "latency": {
+    "mean_s": 12176.08,
+    "min_s": 0,
+    "max_s": 23420.61,
+    "mean_ms": 12176082.0
+  },
+  "config": {
+    "num_records": 2826,
+    "num_entities": 99,
+    "num_chains": 70,
+    "num_high_risk_ips": 45
+  }
+}

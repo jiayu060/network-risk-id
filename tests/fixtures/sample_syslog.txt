@@ -1,0 +1,9 @@
+<134>1 2024-06-15T10:30:00.000Z firewall01 kernel - - - Denied TCP connection from 10.1.2.3:54321 to 192.168.1.100:443
+<13>Jun 15 10:30:15 webserver sshd[12345]: Accepted publickey for admin from 10.1.0.5 port 51234 ssh2
+<14>Jun 15 10:30:20 dns-server named[6789]: client 192.168.1.50#51472: query: evil.xyz (A)
+<11>Jun 15 10:30:25 ids01 snort[9999]: ALERT: ET EXPLOIT Possible CVE-2021-44228 exploit attempt from 203.0.113.5:8080 to 10.1.1.10:80
+<10>Jun 15 10:30:30 firewall01 kernel - - - Allowed UDP connection from 10.1.2.3:123 to 216.239.35.0:123
+<134>1 2024-06-15T10:31:00.000Z authserver sshd - - - Failed password for invalid user root from 192.168.100.5 port 44567 ssh2
+# This is a comment line and should be skipped
+<13>Jun 15 10:31:10 webserver sshd[12346]: Accepted password for user1 from 10.1.0.8 port 52341 ssh2
+<11>Jun 15 10:31:15 mail01 postfix/smtp[5555]: connect to mail.evil.com[198.51.100.10]:25: Connection refused
