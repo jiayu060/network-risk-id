@@ -89,26 +89,56 @@ class RarePathMiner:
                     if etype not in ("network", "dns"):
                         continue
                     event_count = ed.get("event_count", 1)
+                    bytes_out_max = ed.get("bytes_out", 0) or 0
                     ports = ed.get("ports", set())
                     if isinstance(ports, list):
                         ports = set(ports)
-                    chain = self._path_to_chain(
-                        graph, [node, neighbor],
-                        [(node, neighbor, etype, key)],
-                        max(node_risk, 0.5),
-                    )
-                    if chain:
-                        if etype == "dns":
+                    if etype == "dns":
+                        chain = self._path_to_chain(
+                            graph, [node, neighbor],
+                            [(node, neighbor, etype, key)],
+                            max(node_risk, 0.5),
+                        )
+                        if chain:
                             chain.chain_type = "dga_activity"
-                        else:
-                            # Check data volume: large transfer → data_exfil
-                            huge_transfer = ed.get("bytes_out", 0) > 100_000_000 or ed.get("event_count", 0) > 20
-                            non_standard = [p for p in ports if p not in (80, 443, 53)]
-                            if huge_transfer or non_standard:
-                                chain.chain_type = "data_exfil"
-                            else:
-                                chain.chain_type = "c2_beacon"
-                        chains.append(chain)
+                            chains.append(chain)
+                    else:
+                        huge_transfer = bytes_out_max > 100_000_000
+                        non_standard = [p for p in ports if p not in (80, 443, 53)]
+                        # C2 beacon when periodic (3+ events) on standard ports,
+                        # even if some other record on same edge had large transfer
+                        has_beacon = event_count >= 3 and not non_standard
+                        should_exfil = huge_transfer or non_standard
+                        # Generate C2 beacon chain when periodic pattern exists
+                        if has_beacon:
+                            beacon_chain = self._path_to_chain(
+                                graph, [node, neighbor],
+                                [(node, neighbor, etype, key)],
+                                max(node_risk, 0.5),
+                            )
+                            if beacon_chain:
+                                beacon_chain.chain_type = "c2_beacon"
+                                chains.append(beacon_chain)
+                        # Generate data exfil chain when large transfer or non-standard ports
+                        if should_exfil:
+                            exfil_chain = self._path_to_chain(
+                                graph, [node, neighbor],
+                                [(node, neighbor, etype, key)],
+                                max(node_risk, 0.6),
+                            )
+                            if exfil_chain:
+                                exfil_chain.chain_type = "data_exfil"
+                                chains.append(exfil_chain)
+                        # Fallback: neither clear beacon nor clear exfil → classify by event count
+                        if not has_beacon and not should_exfil:
+                            chain = self._path_to_chain(
+                                graph, [node, neighbor],
+                                [(node, neighbor, etype, key)],
+                                max(node_risk, 0.5),
+                            )
+                            if chain:
+                                chain.chain_type = "c2_beacon" if event_count >= 3 else "data_exfil"
+                                chains.append(chain)
 
         # Fallback: direct connections between high-anomaly nodes with rare edges
         # These are typically C2 beacons or direct compromise
@@ -384,10 +414,10 @@ class RarePathMiner:
         if len(chains) <= 1:
             return chains
 
-        # Use set-based dedup: collapse to canonical entity set key
+        # Use set-based dedup: collapse to canonical entity set + chain type key
         seen = {}
         for chain in chains:
-            key = frozenset(n.entity for n in chain.nodes)
+            key = (frozenset(n.entity for n in chain.nodes), chain.chain_type)
             if key not in seen:
                 seen[key] = chain
             elif chain.total_risk_score > seen[key].total_risk_score:

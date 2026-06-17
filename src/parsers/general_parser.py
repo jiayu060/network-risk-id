@@ -177,7 +177,12 @@ class GeneralSecurityLogParser(LogParser):
             else:
                 event_type = "auth_success" if "4624" in line else "auth_failure"
         elif "ssh" in text_lower:
-            event_type = "auth_success" if "success" in text_lower or "established" in text_lower else "auth_success"
+            if "failure" in text_lower or "fail" in text_lower:
+                event_type = "auth_failure"
+            elif "success" in text_lower or "established" in text_lower:
+                event_type = "auth_success"
+            else:
+                event_type = "network_connect"
         elif "file created" in text_lower or "file_create" in text_lower:
             event_type = "file_create"
         elif "file deleted" in text_lower or "file_delete" in text_lower:

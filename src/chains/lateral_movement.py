@@ -61,7 +61,8 @@ class LateralMovementDetector:
                     auth_risk = auth_edge.get("risk_score", 0)
 
                     # Gate: need at least one suspicious signal
-                    if not is_suspicious and auth_risk < 0.3 and pivot_risk < 0.3:
+                    max_node_risk = max(src_risk, pivot_risk)
+                    if not is_suspicious and auth_risk < 0.3 and max_node_risk < 0.3:
                         continue
 
                     for dst in conn_targets:
