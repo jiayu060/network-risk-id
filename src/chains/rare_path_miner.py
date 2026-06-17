@@ -155,6 +155,29 @@ class RarePathMiner:
                     chain.description = f"Port scan: {node} probed {len(targets)} targets"
                     chains.append(chain)
 
+        # Pattern-based chain detection for specialized edge types
+        specialized_types = [
+            "credential_theft", "anti_forensics", "persistence",
+            "mitm_attack", "tool_download", "internal_recon",
+        ]
+        for node in graph.nodes:
+            node_risk = graph.nodes[node].get("risk_score", 0)
+            if node_risk < 0.5:
+                continue
+            for neighbor in graph.successors(node):
+                for key in graph[node][neighbor]:
+                    ed = graph[node][neighbor][key]
+                    etype = ed.get("edge_type", "")
+                    if etype in specialized_types:
+                        chain = self._path_to_chain(
+                            graph, [node, neighbor],
+                            [(node, neighbor, etype, key)],
+                            max(node_risk, 0.6),
+                        )
+                        if chain:
+                            chain.chain_type = etype
+                            chains.append(chain)
+
         # Deduplicate
         chains = self._deduplicate_chains(chains)
         return chains
@@ -271,14 +294,17 @@ class RarePathMiner:
         internal_nodes = [n for n in nodes_in_path if is_internal_ip(n)]
         external_nodes = [n for n in nodes_in_path if not is_internal_ip(n) and not n.startswith("8.8.")]
 
-        # Count total events and unique destinations
+        # Collect evidence from edge data for fine-grained classification
         total_events = 0
         total_dst_ips = set()
+        evidence_keywords = set()
         for src, dst, etype, key in edge_path:
             if graph.has_edge(src, dst, key):
                 ed = graph[src][dst][key]
                 total_events += ed.get("event_count", 1)
             total_dst_ips.add(dst)
+            # Also check raw edge data for classification keywords
+            ed2 = graph[src][dst].get(key, {}) if graph.has_edge(src, dst, key) else {}
 
         # Check if any source node has many targets (port scan pattern)
         source_nodes = set(e[0] for e in edge_path)
@@ -294,6 +320,30 @@ class RarePathMiner:
                     ports.update(ed.get("ports", []))
             max_out_degree = max(max_out_degree, len(targets))
             max_distinct_ports = max(max_distinct_ports, len(ports))
+
+        # Anti-forensics: accessing/deleting security logs, audit trails
+        if "anti_forensics" in edge_types:
+            return "anti_forensics"
+
+        # Credential access: reading SAM, SYSTEM, NTDS, kdbx files
+        if "credential_theft" in edge_types:
+            return "credential_theft"
+
+        # Persistence: startup folder write, scheduled task creation
+        if "persistence" in edge_types:
+            return "persistence"
+
+        # Tool download: external retrieval
+        if "tool_download" in edge_types:
+            return "tool_download"
+
+        # MIITM: ARP poisoning
+        if "mitm_attack" in edge_types:
+            return "mitm_attack"
+
+        # Internal recon: hosts file, system info gathering
+        if "internal_recon" in edge_types:
+            return "internal_recon"
 
         # Lateral movement: auth + network edge sequence
         if "auth" in edge_types and "network" in edge_types:

@@ -64,6 +64,36 @@ _CHAIN_TEMPLATES = {
         "priority": 3,
         "desc": "Suspicious activity pattern requiring further investigation",
     },
+    "anti_forensics": {
+        "phases": ["Defense Evasion"],
+        "mitre": ["T1070", "T1070.001", "T1562"],
+        "priority": 1,
+        "desc": "Anti-forensics: log clearing, evidence destruction, or event log tampering detected",
+    },
+    "persistence": {
+        "phases": ["Persistence"],
+        "mitre": ["T1053", "T1543", "T1547", "T1055"],
+        "priority": 1,
+        "desc": "Persistence mechanism: scheduled task, startup script, or service installation",
+    },
+    "mitm_attack": {
+        "phases": ["Collection", "Credential Access"],
+        "mitre": ["T1557", "T1557.001", "T1557.002"],
+        "priority": 1,
+        "desc": "Man-in-the-Middle attack: ARP poisoning, network redirection, or traffic interception",
+    },
+    "tool_download": {
+        "phases": ["Delivery"],
+        "mitre": ["T1105", "T1570"],
+        "priority": 2,
+        "desc": "Tool download: external file retrieval via FTP/SFTP/HTTP to staging host",
+    },
+    "internal_recon": {
+        "phases": ["Discovery"],
+        "mitre": ["T1083", "T1082", "T1016"],
+        "priority": 3,
+        "desc": "Internal reconnaissance: host enumeration, file share discovery, system info gathering",
+    },
 }
 
 

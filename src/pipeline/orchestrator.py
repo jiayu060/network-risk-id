@@ -242,10 +242,42 @@ class PipelineOrchestrator:
                 ev["score"] += 0.7
                 ev["reasons"].append("横向移动特征")
 
-            # Credential access
-            if any(kw in raw for kw in ("sam", "lsass", "credential", "mimikatz", "ntds.dit", "系统配置")):
-                ev["score"] += 0.8
+            # Credential access: SAM, NTDS, SYSTEM, LSASS, kdbx, memory dump, shadow copy
+            if any(kw in raw for kw in ("sam", "lsass", "credential", "mimikatz", "ntds.dit",
+                                         "system\\config", "memory.dmp", "kdbx", "shadow_copy",
+                                         "session shadow", "shadowing")):
+                ev["score"] += 0.85
                 ev["reasons"].append("凭据访问特征")
+
+            # Anti-forensics: log clearing, evidence destruction, evtx access
+            if any(kw in raw for kw in ("evtx", "audit.log", "clear log", "wipe", "timestomp",
+                                         "event log", "security log", "log tamper")):
+                ev["score"] += 0.85
+                ev["reasons"].append("反取证行为")
+
+            # Persistence: startup, scheduled tasks, boot execute, PrintNightmare
+            if any(kw in raw for kw in ("startup", "schtasks", "start menu", "boot execute",
+                                         "registry run", "printnightmare", "persistence")):
+                ev["score"] += 0.8
+                ev["reasons"].append("持久化机制")
+
+            # MITM attack: ARP cache poisoning, gratuitous ARP
+            if any(kw in raw for kw in ("arp cache", "arp poison", "gratuitous arp",
+                                         "mitm", "ssl strip", "dns poison")):
+                ev["score"] += 0.9
+                ev["reasons"].append("中间人攻击")
+
+            # Tool download: FTP RETR, SFTP download, wget, curl download
+            if any(kw in raw for kw in ("ftp retr", "sftp download", "tool download",
+                                         "bitsadmin", "wget ", "curl -o")):
+                ev["score"] += 0.75
+                ev["reasons"].append("工具下载")
+
+            # Internal recon: hosts file, systeminfo, net view, enumeration
+            if any(kw in raw for kw in ("hosts file", "systeminfo", "net view", "net use",
+                                         "whoami", "ipconfig", "nltest", "dns version")):
+                ev["score"] += 0.5
+                ev["reasons"].append("内部侦察")
 
         # Post-process: aggregate auth failures
         for ip, ev in ip_evidence.items():

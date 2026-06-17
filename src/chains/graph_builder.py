@@ -71,8 +71,12 @@ class TemporalGraph:
                 node["first_seen"] = min(node["first_seen"], timestamp)
                 self._node_events[entity_id].append(record)
 
-            # Build edges
+            # Build edges — classify edge type from record content
             edge_type = event_type
+            raw = record.get("raw_message", "")
+            dst_port = record.get("dst_port")
+
+            # Detect specific attack patterns from raw message content
             if edge_type in ("auth_success", "auth_failure"):
                 edge_label = "auth"
             elif edge_type == "dns_query":
@@ -83,6 +87,30 @@ class TemporalGraph:
                 edge_label = "file"
             elif edge_type == "waf_alert":
                 edge_label = "http"
+            elif raw and any(kw in raw.lower() for kw in (
+                    "sam", "system\\config", "ntds.dit", "memory.dmp", "lsass",
+                    "credential", "kdbx", "shadow_copy", "mimikatz")):
+                edge_label = "credential_theft"
+            elif raw and any(kw in raw.lower() for kw in (
+                    "evtx", "audit.log", "event log", "clear log", "security log",
+                    "timestomp", "log tamper")):
+                edge_label = "anti_forensics"
+            elif raw and any(kw in raw.lower() for kw in (
+                    "startup", "schtasks", "start menu\\programs\\startup",
+                    "persistence", "registry run", "boot execute", "printnightmare")):
+                edge_label = "persistence"
+            elif raw and any(kw in raw.lower() for kw in (
+                    "arp cache", "arp poison", "gratuitous arp", "mitm",
+                    "ssl strip", "dns poison")):
+                edge_label = "mitm_attack"
+            elif raw and any(kw in raw.lower() for kw in (
+                    "ftp retr", "sftp download", "tool download", "wget ",
+                    "curl -o", "bitsadmin /transfer")):
+                edge_label = "tool_download"
+            elif raw and any(kw in raw.lower() for kw in (
+                    "hosts file", "systeminfo", "net view", "net use",
+                    "whoami", "ipconfig /all", "nltest")):
+                edge_label = "internal_recon"
             else:
                 edge_label = "network"
 
