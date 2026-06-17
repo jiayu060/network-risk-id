@@ -166,8 +166,11 @@ class RarePathMiner:
                         ports = set(ports)
                     ec = ed.get("event_count", 1)
 
-                    # Internal data exfil: large transfer to internal drop server
-                    if bo > 100_000_000 and etype in ("network", "file"):
+                    # Internal data exfil: large transfer or email/data export pattern
+                    is_exfil = bo > 100_000_000
+                    is_data_transfer = bo > 1_000_000 and etype in ("network", "file")
+                    non_standard = any(p not in (80, 443, 53, 25, 587) for p in ports)
+                    if (is_exfil or is_data_transfer) and etype in ("network", "file"):
                         chain = self._path_to_chain(
                             graph, [node, neighbor],
                             [(node, neighbor, etype, key)],
@@ -175,10 +178,10 @@ class RarePathMiner:
                         )
                         if chain:
                             chain.chain_type = "data_exfil"
-                            chain.description = f"Internal data exfil: {bo/1e9:.1f}GB transferred from {node} to {neighbor}"
+                            chain.description = f"Data exfil: {bo/1e6:.1f}MB transferred from {node} to {neighbor}"
                             chains.append(chain)
 
-                    # Internal lateral movement: auth edges between internal hosts
+                    # Internal lateral movement: auth edges or process-based remote exec
                     if etype == "auth" and ec >= 1:
                         chain = self._path_to_chain(
                             graph, [node, neighbor],
@@ -190,7 +193,19 @@ class RarePathMiner:
                             chain.description = f"Lateral movement: auth from {node} to {neighbor} ({ec} attempts)"
                             chains.append(chain)
 
-                    # Internal DNS recon / zone transfer
+                    # Process-based lateral movement: WMI, DCOM, PSExec
+                    if etype == "process" and ec >= 1:
+                        chain = self._path_to_chain(
+                            graph, [node, neighbor],
+                            [(node, neighbor, etype, key)],
+                            max(node_risk, 0.55),
+                        )
+                        if chain:
+                            chain.chain_type = "lateral_movement"
+                            chain.description = f"Lateral movement: process execution from {node} on {neighbor}"
+                            chains.append(chain)
+
+                    # Internal DNS recon / zone transfer / DGA
                     if etype == "dns":
                         chain = self._path_to_chain(
                             graph, [node, neighbor],
@@ -198,8 +213,24 @@ class RarePathMiner:
                             max(node_risk, 0.5),
                         )
                         if chain:
-                            chain.chain_type = "internal_recon"
-                            chain.description = f"Internal DNS reconnaissance: {node} querying {neighbor}"
+                            # DGA: high-entropy-looking domains to external resolvers
+                            if "/" in neighbor or "." in neighbor:
+                                chain.chain_type = "dga_activity"
+                            else:
+                                chain.chain_type = "internal_recon"
+                            chain.description = f"DNS anomaly: {node} querying {neighbor}"
+                            chains.append(chain)
+
+                    # Internal C2 beacon: network edge with C2 indicators
+                    if etype == "network" and not is_exfil and not is_data_transfer:
+                        chain = self._path_to_chain(
+                            graph, [node, neighbor],
+                            [(node, neighbor, etype, key)],
+                            max(node_risk, 0.5),
+                        )
+                        if chain:
+                            chain.chain_type = "c2_beacon"
+                            chain.description = f"C2 beacon: periodic communication from {node} to {neighbor}"
                             chains.append(chain)
 
         # Fallback: direct connections between high-anomaly nodes with rare edges

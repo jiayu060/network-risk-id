@@ -679,8 +679,10 @@ st.sidebar.markdown("---")
 st.sidebar.metric("处理事件总数", f"{DATA['total_events']:,}")
 st.sidebar.metric("发现攻击链", len(DATA["chains"]))
 st.sidebar.metric("识别实体数", DATA.get("entity_count", 0))
-high_risk = sum(1 for s in DATA["ip_scores"].values() if s > 0.5)
-st.sidebar.metric("高风险IP", high_risk)
+high_risk = sum(1 for s in DATA["ip_scores"].values() if s > 0.7)
+watch_ips = sum(1 for s in DATA["ip_scores"].values() if s > 0.5)
+st.sidebar.metric("异常IP (>0.7)", high_risk)
+st.sidebar.metric("需关注IP (>0.5)", watch_ips)
 
 st.sidebar.markdown("---")
 st.sidebar.caption(f"v2.0 — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
@@ -753,7 +755,7 @@ if page == "📁 日志导入与分析":
                         st.session_state.source_type = source_type
                         st.session_state.data_source_name = f"导入: {', '.join(f.name for f in uploaded_files)}"
                         st.session_state.use_demo_data = False
-                    st.success(f"✅ 分析完成！**{len(data['chains'])}** 条攻击链，**{sum(1 for s in data['ip_scores'].values() if s > 0.5)}** 个高风险IP")
+                    st.success(f"✅ 分析完成！**{len(data['chains'])}** 条攻击链，**{sum(1 for s in data['ip_scores'].values() if s > 0.7)}** 个异常IP")
                     st.rerun()
                 else:
                     st.error("未能解析出有效记录，请检查日志格式是否匹配。")
@@ -875,7 +877,7 @@ if page == "📁 日志导入与分析":
     cols[0].metric("数据来源", st.session_state.get("data_source_name", "?"))
     cols[1].metric("总记录", f"{res['total_events']:,}")
     cols[2].metric("攻击链", len(res["chains"]))
-    cols[3].metric("高风险IP", sum(1 for s in res["ip_scores"].values() if s > 0.5))
+    cols[3].metric("异常IP", sum(1 for s in res["ip_scores"].values() if s > 0.7))
     cols[4].metric("实体数", res.get("entity_count", 0))
 
     chain_types = Counter(c.chain_type for c in res["chains"])

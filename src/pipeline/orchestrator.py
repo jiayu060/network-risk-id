@@ -223,7 +223,8 @@ class PipelineOrchestrator:
                 ev["score"] += 0.4
                 ev["reasons"].append(f"中流量外传({bo/1e6:.0f}MB)")
             if any(kw in raw for kw in ("steganography", "encrypted archive", "data exfil",
-                                         "database dump", "sql exfil", "exfiltration")):
+                                         "database dump", "sql exfil", "exfiltration",
+                                         "email exfil", "smtp outbound", "attachment")):
                 ev["score"] += 0.8
                 ev["reasons"].append("数据外泄特征")
 
@@ -244,14 +245,16 @@ class PipelineOrchestrator:
 
             # SMB exec / lateral movement indicator
             if any(kw in raw for kw in ("smb2 exec", "smb2 create", "treeconnect", "dce/rpc", "wmi",
-                                         "lateral movement", "psexec", "key-based login")):
+                                         "lateral movement", "psexec", "key-based login",
+                                         "dcom lateral", "wmiexec", "wmi process")):
                 ev["score"] += 0.7
                 ev["reasons"].append("横向移动特征")
 
             # Credential access: SAM, NTDS, SYSTEM, LSASS, kdbx, memory dump, shadow copy
             if any(kw in raw for kw in ("sam", "lsass", "credential", "mimikatz", "ntds.dit",
                                          "system\\config", "memory.dmp", "kdbx", "shadow_copy",
-                                         "session shadow", "shadowing")):
+                                         "session shadow", "shadowing",
+                                         "kerberos", "kerberoasting", "tgs-req", "tgt")):
                 ev["score"] += 0.85
                 ev["reasons"].append("凭据访问特征")
 
@@ -283,14 +286,17 @@ class PipelineOrchestrator:
             # Internal recon: hosts file, systeminfo, net view, enumeration, zone transfer
             if any(kw in raw for kw in ("hosts file", "systeminfo", "net view", "net use",
                                          "whoami", "ipconfig", "nltest", "dns version",
-                                         "zone transfer", "dns zone", "information gathering")):
+                                         "zone transfer", "dns zone", "information gathering",
+                                         "ldap enum", "ldap bind", "directory enumeration",
+                                         "dns txt", "txt record", "dns tunnel")):
                 ev["score"] += 0.5
                 ev["reasons"].append("内部侦察")
 
             # Privilege escalation / evasion
             if any(kw in raw for kw in ("uac bypass", "privilege escalation", "privilege elevation",
                                          "masquerading", "renamed as", "binary masquerad",
-                                         "fodhelper", "eventvwr")):
+                                         "fodhelper", "eventvwr", "amsi bypass", "amsi",
+                                         "fileless", "memory-resident", "memory resident")):
                 ev["score"] += 0.8
                 ev["reasons"].append("提权/规避行为")
 

@@ -26,7 +26,7 @@ class GeneralSecurityLogParser(LogParser):
         )
         # src_ip -> dst_ip:port pattern
         self._conn_re = re.compile(
-            r"(\d+\.\d+\.\d+\.\d+)\s*->\s*(\d+\.\d+\.\d+\.\d+):(\d+)"
+            r"(\d+\.\d+\.\d+\.\d+)\)?\s*->\s*(\d+\.\d+\.\d+\.\d+):(\d+)"
         )
         self._conn_subnet_re = re.compile(
             r"(\d+\.\d+\.\d+\.\d+)\s*->\s*(\d+\.\d+\.\d+\.\d+/\d+)"
@@ -51,6 +51,26 @@ class GeneralSecurityLogParser(LogParser):
         # "exported/uploaded/transferred from X to Y:port" (reverse of standard)
         self._export_from_to_re = re.compile(
             r"(?:exported|uploaded|transferred|dumped)\s+from\s+[\w-]+\s*\(?(\d+\.\d+\.\d+\.\d+)\)?\s+to\s+(\S+)",
+            re.IGNORECASE,
+        )
+        # "Domain X from IP" (DGA domain reported)
+        self._domain_from_ip_re = re.compile(
+            r"(?:domain|host)\s+([a-z0-9][a-z0-9.-]*\.[a-z]{2,})\s+from\s+(\d+\.\d+\.\d+\.\d+)",
+            re.IGNORECASE,
+        )
+        # "from IP to DOMAIN" (destination is domain, not IP)
+        self._from_ip_to_domain_re = re.compile(
+            r"from\s+(\d+\.\d+\.\d+\.\d+)\s+to\s+([a-z0-9][a-z0-9.-]*\.[a-z]{2,})",
+            re.IGNORECASE,
+        )
+        # "on DST from SRC" (reverse with "on" instead of "to")
+        self._on_from_re = re.compile(
+            r"on\s+(\d+\.\d+\.\d+\.\d+)\s+from\s+(\d+\.\d+\.\d+\.\d+)",
+            re.IGNORECASE,
+        )
+        # "sent X to Y" data transfer
+        self._sent_to_re = re.compile(
+            r"sent\s+(\d+(?:\.\d+)?)\s*(GB|MB|KB|TB)\s+(?:attachment\s+)?to\s+(\d+\.\d+\.\d+\.\d+)",
             re.IGNORECASE,
         )
         # Severity level [WARNING], [ALERT], [CRITICAL]
@@ -151,25 +171,49 @@ class GeneralSecurityLogParser(LogParser):
                                 domain = dst_str
                                 dst_ip = dst_str  # Use domain as destination for edge creation
                         else:
-                            # "from X to Y:port" pattern
-                            m = self._from_to_re.search(line)
+                            # "Domain X from IP" (DGA/reputation domain report)
+                            m = self._domain_from_ip_re.search(line)
                             if m:
+                                domain = m.group(1)
+                                src_ip = m.group(2)
+                                dst_ip = domain  # Use domain as edge destination
+                            # "from IP to DOMAIN" (destination is domain name)
+                            elif self._from_ip_to_domain_re.search(line):
+                                m = self._from_ip_to_domain_re.search(line)
                                 src_ip = m.group(1)
-                                dst_ip = m.group(2)
+                                domain = m.group(2)
+                                dst_ip = domain  # Use domain as edge destination
                             else:
-                                # "from X to Y/subnet" pattern
-                                m = self._from_to_subnet_re.search(line)
+                                # "on DST from SRC" (reverse with "on" keyword)
+                                m = self._on_from_re.search(line)
                                 if m:
-                                    src_ip = m.group(1)
-                                    dst_ip = m.group(2)
+                                    dst_ip = m.group(1)
+                                    src_ip = m.group(2)
                                 else:
-                                    # Try to extract any IPs
-                                    ips = re.findall(r"(\d+\.\d+\.\d+\.\d+)", line)
-                                    if len(ips) >= 2:
-                                        src_ip = ips[0]
-                                        dst_ip = ips[1]
-                                    elif len(ips) == 1:
-                                        src_ip = ips[0]
+                                    # "sent X MB/GB to DST" data transfer
+                                    m = self._sent_to_re.search(line)
+                                    if m:
+                                        dst_ip = m.group(3)
+                                    # "from X to Y:port" pattern (only if not already matched)
+                                    if not (src_ip and dst_ip):
+                                        m = self._from_to_re.search(line)
+                                        if m:
+                                            src_ip = m.group(1)
+                                            dst_ip = m.group(2)
+                                        else:
+                                            # "from X to Y/subnet" pattern
+                                            m = self._from_to_subnet_re.search(line)
+                                            if m:
+                                                src_ip = m.group(1)
+                                                dst_ip = m.group(2)
+                                            else:
+                                                # Try to extract any IPs
+                                                ips = re.findall(r"(\d+\.\d+\.\d+\.\d+)", line)
+                                                if len(ips) >= 2:
+                                                    src_ip = ips[0]
+                                                    dst_ip = ips[1]
+                                                elif len(ips) == 1:
+                                                    src_ip = ips[0]
 
         # Port extraction from broader context if not already found
         if dst_port is None:
@@ -270,11 +314,19 @@ class GeneralSecurityLogParser(LogParser):
             event_type = "dns_query"
         elif "dns zone transfer" in text_lower:
             event_type = "dns_query"
+        elif "dns txt" in text_lower or ("dns" in text_lower and "txt record" in text_lower):
+            event_type = "dns_query"
         elif "dga" in text_lower or "domain generation" in text_lower:
+            event_type = "dns_query"
+        elif "low reputation" in text_lower and "domain" in text_lower:
             event_type = "dns_query"
         elif "auth_success" in text_lower or "logon success" in text_lower or "login success" in text_lower:
             event_type = "auth_success"
         elif "pass-the-hash" in text_lower or "ntlm hash" in text_lower:
+            event_type = "auth_success"
+        elif "kerberos" in text_lower or "kerberoasting" in text_lower or "tgs-req" in text_lower:
+            event_type = "auth_success"
+        elif "ldap" in text_lower and ("bind" in text_lower or "enum" in text_lower):
             event_type = "auth_success"
         elif "auth_failure" in text_lower or "logon failure" in text_lower or "login fail" in text_lower or "failed password" in text_lower:
             event_type = "auth_failure"
@@ -314,9 +366,17 @@ class GeneralSecurityLogParser(LogParser):
             event_type = "process_create"
         elif "uac bypass" in text_lower or "privilege escalation" in text_lower or "privilege elevation" in text_lower:
             event_type = "process_create"
+        elif "amsi bypass" in text_lower or "amsi" in text_lower:
+            event_type = "process_create"
+        elif "memory-resident" in text_lower or "fileless" in text_lower or "fileless attack" in text_lower:
+            event_type = "process_create"
+        elif "dcom" in text_lower and ("lateral" in text_lower or "triggered" in text_lower):
+            event_type = "process_create"
         elif "waf" in text_lower and "alert" in text_lower:
             event_type = "waf_alert"
         elif "scheduled task" in text_lower or "schtasks" in text_lower:
+            event_type = "process_create"
+        elif "wmi process" in text_lower or ("wmi" in text_lower and "creation" in text_lower):
             event_type = "process_create"
         elif "lsass" in text_lower or "credential dump" in text_lower or "procdump" in text_lower:
             event_type = "process_create"
@@ -334,8 +394,10 @@ class GeneralSecurityLogParser(LogParser):
             event_type = "http_request"
 
         # ---- Bytes ----
-        # Pattern: "8.3GB exported", "28.7GB uploaded", "1.2MB transferred"
-        m = re.search(r"(\d+(?:\.\d+)?)\s*(GB|MB|KB|TB)\s*(?:exported|uploaded|transferred|dumped|detected|in\s)", line, re.IGNORECASE)
+        # Pattern: "8.3GB exported", "28.7GB uploaded", "sent 15.2MB attachment"
+        m = re.search(r"(\d+(?:\.\d+)?)\s*(GB|MB|KB|TB)\s*(?:exported|uploaded|transferred|dumped|detected|sent|in\s)", line, re.IGNORECASE)
+        if not m:
+            m = re.search(r"sent\s+(\d+(?:\.\d+)?)\s*(GB|MB|KB|TB)", line, re.IGNORECASE)
         if not m:
             m = re.search(r"(?:size|total|amount)\s*[=:]*\s*(\d+(?:\.\d+)?)\s*(GB|MB|KB|bytes|b)?", line, re.IGNORECASE)
         if not m:
