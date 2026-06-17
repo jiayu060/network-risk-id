@@ -421,14 +421,33 @@ class RarePathMiner:
         if max_out_degree >= 8 and max_distinct_ports >= 5 and "network" in edge_types:
             return "recon_scan"
 
-        # Data exfil: internal → external, high-volume network transfer
+        # Data exfil vs C2 beacon: internal → external with network edges
         if external_nodes and internal_nodes and "network" in edge_types:
-            if total_events >= 8 or len(edge_path) >= 2:
+            # Check edge data for volume and port signals
+            is_exfil = False
+            is_beacon = False
+            for src, dst, etype, key in edge_path:
+                if graph.has_edge(src, dst, key):
+                    ed = graph[src][dst][key]
+                    bo = ed.get("bytes_out", 0) or 0
+                    ports = ed.get("ports", set())
+                    if isinstance(ports, list):
+                        ports = set(ports)
+                    ec = ed.get("event_count", 1)
+                    # Data exfil signals: large transfer or non-standard port
+                    if bo > 100_000_000 or any(p not in (80, 443, 53) for p in ports):
+                        is_exfil = True
+                    # C2 beacon signals: periodic on standard ports with small bytes
+                    elif ec >= 3 and bo < 10_000_000:
+                        is_beacon = True
+            if is_exfil:
                 return "data_exfil"
-            return "c2_beacon"
-
-        # C2 beacon: single internal → external with network
-        if external_nodes and internal_nodes and len(edge_path) == 1:
+            if is_beacon:
+                return "c2_beacon"
+            # Multi-hop with external → data_exfil
+            if len(edge_path) >= 2 or total_events >= 8:
+                return "data_exfil"
+            # Single hop, no strong signal → c2_beacon as default
             return "c2_beacon"
 
         # Multi-hop with mixed types
@@ -456,16 +475,21 @@ class RarePathMiner:
                 seen[key] = chain
 
         # Sort by length descending and remove sub-paths (O(N * K) where K is small)
+        # Only remove true sub-paths: same or compatible chain type, strict subset of entities
         kept = sorted(seen.values(), key=lambda c: len(c.nodes), reverse=True)
         result = []
         for chain in kept:
             chain_entities = set(n.entity for n in chain.nodes)
             is_subset = False
-            for kept_chain in result[:100]:  # compare against top 100 longest
+            for kept_chain in result[:100]:
                 kept_entities = set(n.entity for n in kept_chain.nodes)
                 if chain_entities != kept_entities and chain_entities.issubset(kept_entities):
-                    is_subset = True
-                    break
+                    # Only skip if chain types are compatible (same or related)
+                    if chain.chain_type == kept_chain.chain_type:
+                        is_subset = True
+                        break
+                    # Also skip if the longer chain covers the shorter chain's type
+                    # (e.g., lateral_movement subsumes individual auth/network paths)
             if not is_subset:
                 result.append(chain)
 
