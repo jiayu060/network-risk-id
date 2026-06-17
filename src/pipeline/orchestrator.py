@@ -214,7 +214,7 @@ class PipelineOrchestrator:
                     ev["score"] += 0.6
                     ev["reasons"].append(f"高熵域名({domain})")
 
-            # Large data transfer
+            # Large data transfer / data exfiltration
             bo = r.get("bytes_out") or 0
             if bo > 100_000_000:
                 ev["score"] += 0.8
@@ -222,6 +222,10 @@ class PipelineOrchestrator:
             elif bo > 1_000_000:
                 ev["score"] += 0.4
                 ev["reasons"].append(f"中流量外传({bo/1e6:.0f}MB)")
+            if any(kw in raw for kw in ("steganography", "encrypted archive", "data exfil",
+                                         "database dump", "sql exfil", "exfiltration")):
+                ev["score"] += 0.8
+                ev["reasons"].append("数据外泄特征")
 
             # Brute force / auth failure
             if r.get("event_type") == "auth_failure":
@@ -239,7 +243,8 @@ class PipelineOrchestrator:
                 ev["reasons"].append("持久化/隧道行为")
 
             # SMB exec / lateral movement indicator
-            if any(kw in raw for kw in ("smb2 exec", "smb2 create", "treeconnect", "dce/rpc", "wmi")):
+            if any(kw in raw for kw in ("smb2 exec", "smb2 create", "treeconnect", "dce/rpc", "wmi",
+                                         "lateral movement", "psexec", "key-based login")):
                 ev["score"] += 0.7
                 ev["reasons"].append("横向移动特征")
 
@@ -250,9 +255,10 @@ class PipelineOrchestrator:
                 ev["score"] += 0.85
                 ev["reasons"].append("凭据访问特征")
 
-            # Anti-forensics: log clearing, evidence destruction, evtx access
+            # Anti-forensics: log clearing, evidence destruction, evtx access, shadow copy deletion
             if any(kw in raw for kw in ("evtx", "audit.log", "clear log", "wipe", "timestomp",
-                                         "event log", "security log", "log tamper")):
+                                         "event log", "security log", "log tamper",
+                                         "shadow copy", "vssadmin", "ransomware")):
                 ev["score"] += 0.85
                 ev["reasons"].append("反取证行为")
 
@@ -274,11 +280,19 @@ class PipelineOrchestrator:
                 ev["score"] += 0.75
                 ev["reasons"].append("工具下载")
 
-            # Internal recon: hosts file, systeminfo, net view, enumeration
+            # Internal recon: hosts file, systeminfo, net view, enumeration, zone transfer
             if any(kw in raw for kw in ("hosts file", "systeminfo", "net view", "net use",
-                                         "whoami", "ipconfig", "nltest", "dns version")):
+                                         "whoami", "ipconfig", "nltest", "dns version",
+                                         "zone transfer", "dns zone", "information gathering")):
                 ev["score"] += 0.5
                 ev["reasons"].append("内部侦察")
+
+            # Privilege escalation / evasion
+            if any(kw in raw for kw in ("uac bypass", "privilege escalation", "privilege elevation",
+                                         "masquerading", "renamed as", "binary masquerad",
+                                         "fodhelper", "eventvwr")):
+                ev["score"] += 0.8
+                ev["reasons"].append("提权/规避行为")
 
         # Post-process: aggregate auth failures
         for ip, ev in ip_evidence.items():

@@ -151,6 +151,57 @@ class RarePathMiner:
                                 chain.chain_type = "c2_beacon"
                                 chains.append(chain)
 
+        # Internal→internal attack detection (data exfil to internal drop, lateral movement, internal recon)
+        for node in graph.nodes:
+            node_risk = graph.nodes[node].get("risk_score", 0)
+            if node_risk < 0.5:
+                continue
+            for neighbor in graph.successors(node):
+                for key in graph[node][neighbor]:
+                    ed = graph[node][neighbor][key]
+                    etype = ed.get("edge_type", "unknown")
+                    bo = ed.get("bytes_out", 0) or 0
+                    ports = ed.get("ports", set())
+                    if isinstance(ports, list):
+                        ports = set(ports)
+                    ec = ed.get("event_count", 1)
+
+                    # Internal data exfil: large transfer to internal drop server
+                    if bo > 100_000_000 and etype in ("network", "file"):
+                        chain = self._path_to_chain(
+                            graph, [node, neighbor],
+                            [(node, neighbor, etype, key)],
+                            max(node_risk, 0.6),
+                        )
+                        if chain:
+                            chain.chain_type = "data_exfil"
+                            chain.description = f"Internal data exfil: {bo/1e9:.1f}GB transferred from {node} to {neighbor}"
+                            chains.append(chain)
+
+                    # Internal lateral movement: auth edges between internal hosts
+                    if etype == "auth" and ec >= 1:
+                        chain = self._path_to_chain(
+                            graph, [node, neighbor],
+                            [(node, neighbor, etype, key)],
+                            max(node_risk, 0.5),
+                        )
+                        if chain:
+                            chain.chain_type = "lateral_movement"
+                            chain.description = f"Lateral movement: auth from {node} to {neighbor} ({ec} attempts)"
+                            chains.append(chain)
+
+                    # Internal DNS recon / zone transfer
+                    if etype == "dns":
+                        chain = self._path_to_chain(
+                            graph, [node, neighbor],
+                            [(node, neighbor, etype, key)],
+                            max(node_risk, 0.5),
+                        )
+                        if chain:
+                            chain.chain_type = "internal_recon"
+                            chain.description = f"Internal DNS reconnaissance: {node} querying {neighbor}"
+                            chains.append(chain)
+
         # Fallback: direct connections between high-anomaly nodes with rare edges
         # These are typically C2 beacons or direct compromise
         high_anomaly = sorted(seed_nodes, key=lambda n: graph.nodes[n].get("risk_score", 0), reverse=True)[:20]

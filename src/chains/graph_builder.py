@@ -114,6 +114,10 @@ class TemporalGraph:
             else:
                 edge_label = "network"
 
+            # Skip edges where either endpoint is unknown (single-host events)
+            if src_ip == "unknown" or dst_ip == "unknown":
+                continue
+
             edge_key = (src_ip, dst_ip, edge_label)
             self._edge_events[edge_key].append(record)
 
