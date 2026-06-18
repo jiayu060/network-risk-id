@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 st.set_page_config(page_title="网络风险识别", page_icon="🛡️", layout="wide",
                    initial_sidebar_state="expanded")
 
-__version__ = "0.3.5"  # default general parser + smart fallback + entity debug
+__version__ = "0.3.6"  # wrapped-line joining + ARP欺骗/可疑活动 label mapping
 
 # ============================================================
 # Chinese Labels
@@ -311,12 +311,13 @@ _LABEL_TO_CHAIN_TYPE = {
     "凭据访问": "credential_theft", "凭据窃取": "credential_theft",
     "持久化": "persistence",
     "反取证活动": "anti_forensics", "反取证": "anti_forensics",
-    "中间人攻击": "mitm_attack",
+    "中间人攻击": "mitm_attack", "ARP欺骗": "mitm_attack",
     "内部侦察": "internal_recon",
     "工具下载": "tool_download",
     "防御规避": "anti_forensics",
     "勒索软件": "ransomware_pattern",
     "权限提升": "privilege_escalation",
+    "可疑活动": "suspicious_activity",
 }
 
 
@@ -348,7 +349,26 @@ def _extract_ground_truth(records: list[dict]) -> list:
 
 def parse_log_text(log_text: str, source_type: str) -> list[dict]:
     """Parse a log text string into structured records. Auto-fallback to general parser."""
+    import re
     from src.parsers.parser_registry import ParserRegistry
+
+    # Pre-process: join wrapped/continuation lines that don't start with a timestamp
+    _ts_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}")
+    raw_lines = log_text.splitlines()
+    merged_lines = []
+    for line in raw_lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if _ts_pattern.match(stripped):
+            merged_lines.append(stripped)
+        elif merged_lines:
+            # Continuation line — append to previous line
+            merged_lines[-1] += " " + stripped
+        else:
+            # No previous line yet, treat as standalone
+            merged_lines.append(stripped)
+    log_text = "\n".join(merged_lines)
 
     def _try_parse(parser) -> list[dict]:
         recs = []
