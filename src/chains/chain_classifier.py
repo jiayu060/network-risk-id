@@ -86,7 +86,13 @@ _CHAIN_TEMPLATES = {
         "phases": ["Collection", "Credential Access"],
         "mitre": ["T1557", "T1557.001", "T1557.002"],
         "priority": 1,
-        "desc": "Man-in-the-Middle attack: ARP poisoning, network redirection, or traffic interception",
+        "desc": "Man-in-the-Middle attack: SSL stripping, DNS poisoning, or traffic interception",
+    },
+    "arp_spoof": {
+        "phases": ["Collection", "Credential Access"],
+        "mitre": ["T1557", "T1557.002"],
+        "priority": 1,
+        "desc": "ARP Spoofing: ARP cache poisoning, gratuitous ARP, MAC spoofing for traffic interception",
     },
     "tool_download": {
         "phases": ["Delivery"],

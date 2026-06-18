@@ -106,8 +106,10 @@ class TemporalGraph:
                     "persistence", "registry run", "boot execute", "printnightmare")):
                 edge_label = "persistence"
             elif raw_lower and any(kw in raw_lower for kw in (
-                    "arp cache", "arp poison", "gratuitous arp", "mitm",
-                    "ssl strip", "dns poison")):
+                    "arp cache", "arp poison", "gratuitous arp")):
+                edge_label = "arp_spoof"
+            elif raw_lower and any(kw in raw_lower for kw in (
+                    "mitm", "ssl strip", "dns poison")):
                 edge_label = "mitm_attack"
             elif raw_lower and any(kw in raw_lower for kw in (
                     "ftp retr", "sftp download", "tool download", "wget ",

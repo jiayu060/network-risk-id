@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 st.set_page_config(page_title="网络风险识别", page_icon="🛡️", layout="wide",
                    initial_sidebar_state="expanded")
 
-__version__ = "0.3.8"  # complete 16-type attack description table
+__version__ = "0.3.10"  # arp_spoof + complete type_names and action_map for all 16 chain types
 
 # ============================================================
 # Chinese Labels
@@ -35,7 +35,7 @@ CHAIN_LABELS = {
     "credential_theft": "凭据窃取", "privilege_escalation": "权限提升",
     "supply_chain": "供应链攻击", "suspicious_activity": "可疑活动",
     "anti_forensics": "反取证活动", "persistence": "持久化",
-    "mitm_attack": "中间人攻击/ARP欺骗", "tool_download": "工具下载",
+    "mitm_attack": "中间人攻击", "arp_spoof": "ARP欺骗", "tool_download": "工具下载",
     "internal_recon": "内部侦察",
     "brute_force": "暴力破解",
 }
@@ -311,7 +311,7 @@ _LABEL_TO_CHAIN_TYPE = {
     "凭据访问": "credential_theft", "凭据窃取": "credential_theft",
     "持久化": "persistence",
     "反取证活动": "anti_forensics", "反取证": "anti_forensics",
-    "中间人攻击": "mitm_attack", "ARP欺骗": "mitm_attack",
+    "中间人攻击": "mitm_attack", "ARP欺骗": "arp_spoof",
     "内部侦察": "internal_recon",
     "工具下载": "tool_download",
     "防御规避": "anti_forensics",
@@ -555,6 +555,12 @@ def _generate_pdf_report(data: dict, chains: list, ip_scores: dict,
         "c2_beacon": "C2信标", "lateral_movement": "横向移动",
         "data_exfil": "数据外泄", "dga_activity": "DGA活动",
         "recon_scan": "侦察扫描", "suspicious_activity": "可疑活动",
+        "credential_theft": "凭据窃取", "brute_force": "暴力破解",
+        "ransomware_pattern": "勒索软件", "privilege_escalation": "权限提升",
+        "supply_chain": "供应链攻击", "anti_forensics": "反取证活动",
+        "persistence": "持久化", "mitm_attack": "中间人攻击",
+        "arp_spoof": "ARP欺骗", "tool_download": "工具下载",
+        "internal_recon": "内部侦察",
     }
 
     top_chains = sorted(chains, key=lambda x: x.total_risk_score, reverse=True)[:15]
@@ -661,6 +667,18 @@ def _generate_pdf_report(data: dict, chains: list, ip_scores: dict,
         "data_exfil": "阻断出站大流量传输，审查目标外部IP的历史通信",
         "dga_activity": "封禁DGA域名，扫描源主机排查恶意软件感染",
         "recon_scan": "确认扫描来源，加强目标网络防火墙规则",
+        "credential_theft": "立即重置受影响账户凭据，排查LSASS/SAM/NTDS访问记录",
+        "brute_force": "锁定被爆破账户，启用MFA，审查认证日志识别攻击源IP",
+        "ransomware_pattern": "立即隔离受害主机，切断网络连接，启动应急响应流程",
+        "privilege_escalation": "审查权限变更日志，检查新增管理员账户，排查UAC绕过痕迹",
+        "supply_chain": "隔离受影响软件/更新源，验证文件签名和哈希值",
+        "anti_forensics": "保护残留日志证据，检查日志完整性，恢复被清除事件",
+        "persistence": "清除持久化机制(计划任务/启动项/服务)，审查注册表变更",
+        "mitm_attack": "排查网络设备ARP表异常，部署DHCP Snooping和DAI防护",
+        "arp_spoof": "排查ARP缓存异常条目，启用DAI(Dynamic ARP Inspection)，绑定IP-MAC",
+        "tool_download": "审查下载文件来源和内容，检查FTP/SFTP传输记录",
+        "internal_recon": "加强内部网络监控，审查LDAP/DNS枚举来源",
+        "suspicious_activity": "深入调查异常活动模式，收集更多上下文证据",
     }
     for atype in found_types:
         if atype in action_map:
@@ -1125,7 +1143,8 @@ elif page == "🔗 攻击链详情":
         | **暴力破解** | Brute Force | 反复尝试登录凭据，针对RDP/SSH/SMB等远程服务进行密码爆破 | 短时间多次登录失败(3+)、多用户名尝试、RDP/3389 | T1110 |
         | **反取证活动** | Anti-Forensics | 清除或篡改安全审计日志、事件日志，隐藏攻击痕迹 | 读取/删除evtx日志、audit.log访问、安全日志清除 | T1070, T1562 |
         | **持久化** | Persistence | 在受害主机上设置持久化机制，确保重启后仍能维持访问 | 启动文件夹写入、计划任务创建(schtasks)、WMI持久化 | T1053, T1547 |
-        | **中间人攻击/ARP欺骗** | MITM/ARP Spoofing | 通过ARP缓存投毒、DNS欺骗等手段拦截/篡改网络通信 | 免费ARP包、ARP缓存投毒、DNS响应伪造、MAC伪造 | T1557 |
+        | **中间人攻击** | MITM Attack | 通过SSL剥离、DNS欺骗等手段拦截/篡改网络通信 | SSL证书伪造、DNS响应篡改、流量重定向 | T1557 |
+        | **ARP欺骗** | ARP Spoofing | 通过发送伪造ARP报文将网络流量重定向到攻击者主机 | ARP缓存投毒、免费ARP包、MAC地址伪造、网关欺骗 | T1557.002 |
         | **工具下载** | Tool Download | 从外部下载攻击工具、后门、凭证转储器等恶意文件 | FTP/SFTP下载、wget/curl下载、BITSAdmin传输 | T1105 |
         | **内部侦察** | Internal Recon | 在已攻陷主机上收集内网信息，为横向扩散做准备 | hosts文件读取、systeminfo/whoami、net view枚举 | T1083, T1016 |
         | **权限提升** | Privilege Escalation | 利用漏洞或配置弱点获取更高权限，如管理员/SYSTEM | UAC绕过、PrintNightmare、内核漏洞利用 | T1068, T1134 |
@@ -1133,7 +1152,7 @@ elif page == "🔗 攻击链详情":
         | **供应链攻击** | Supply Chain | 通过第三方软件/服务入侵目标，如依赖劫持 | 恶意更新、第三方组件后门、软件源替换 | T1195 |
         | **可疑活动** | Suspicious Activity | 不符合已知攻击模式但风险评分较高的异常行为 | 通信模式罕见、路径稀有度高、异常时段操作 | 待确认 |
         """)
-        st.caption("每条攻击链都会自动映射到 MITRE ATT&CK 框架的战术技术编号，便于与威胁情报和合规要求对齐。覆盖 16 种攻击类型。")
+        st.caption("每条攻击链都会自动映射到 MITRE ATT&CK 框架的战术技术编号，便于与威胁情报和合规要求对齐。覆盖 17 种攻击类型。")
     chains = DATA["chains"]
     if not chains:
         st.warning("未发现攻击链 — 当前日志数据中未检测到攻击模式。这可能意味着网络状态正常，或需要调整检测灵敏度。"); st.stop()

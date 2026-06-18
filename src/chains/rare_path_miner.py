@@ -314,7 +314,7 @@ class RarePathMiner:
         # Pattern-based chain detection for specialized edge types
         specialized_types = [
             "credential_theft", "anti_forensics", "persistence",
-            "mitm_attack", "tool_download", "internal_recon",
+            "mitm_attack", "arp_spoof", "tool_download", "internal_recon",
         ]
         for node in graph.nodes:
             node_risk = graph.nodes[node].get("risk_score", 0)
@@ -493,9 +493,13 @@ class RarePathMiner:
         if "tool_download" in edge_types:
             return "tool_download"
 
-        # MIITM: ARP poisoning
+        # MITM: SSL stripping, DNS poisoning
         if "mitm_attack" in edge_types:
             return "mitm_attack"
+
+        # ARP欺骗: ARP cache poisoning, gratuitous ARP
+        if "arp_spoof" in edge_types:
+            return "arp_spoof"
 
         # Internal recon: hosts file, system info gathering
         if "internal_recon" in edge_types:
