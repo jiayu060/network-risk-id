@@ -955,6 +955,15 @@ if page == "📁 日志导入与分析":
             score_rows = [{"IP": ip, "评分": f"{s:.3f}"} for ip, s in sorted(scores.items(), key=lambda x: x[1], reverse=True)]
             st.dataframe(pd.DataFrame(score_rows), use_container_width=True, hide_index=True)
 
+        entity_list = res.get("entity_list", [])
+        entity_raw = res.get("entity_scores_raw", {})
+        if entity_list:
+            st.markdown(f"**实体分组 (共 {len(entity_list)} 组):**")
+            ent_rows = []
+            for eid in entity_list:
+                ent_rows.append({"实体ID": eid[:60], "原始评分": f"{entity_raw.get(eid, '?'):.3f}" if isinstance(entity_raw.get(eid), (int, float)) else str(entity_raw.get(eid, '?'))})
+            st.dataframe(pd.DataFrame(ent_rows), use_container_width=True, hide_index=True)
+
     if st.button("🔄 恢复使用演示数据", key="reset_demo"):
         st.session_state.analysis_results = None
         st.session_state.data_source_name = "演示数据 (内置攻击注入)"

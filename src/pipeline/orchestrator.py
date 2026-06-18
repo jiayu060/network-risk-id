@@ -156,6 +156,8 @@ class PipelineOrchestrator:
             "edge_summary": dict(edge_summary),
             "total_events": total,
             "entity_count": len(entity_list),
+            "entity_list": entity_list,
+            "entity_scores_raw": entity_scores_raw,
             "graph_data": tg.to_dict(),
             "report": report,
         }
