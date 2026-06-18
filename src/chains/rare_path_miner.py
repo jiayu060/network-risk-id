@@ -219,8 +219,10 @@ class RarePathMiner:
                             max(node_risk, 0.5),
                         )
                         if chain:
-                            # DGA: domain name destinations (not IP addresses)
-                            if re.match(r"^\d+\.\d+\.\d+\.\d+$", neighbor) or "/" in neighbor:
+                            # DNS to internal IP → recon; to external/domain → DGA
+                            is_ip_target = re.match(r"^\d+\.\d+\.\d+\.\d+$", neighbor)
+                            is_cidr = "/" in neighbor
+                            if (is_ip_target or is_cidr) and is_internal_ip(neighbor):
                                 chain.chain_type = "internal_recon"
                             else:
                                 chain.chain_type = "dga_activity"
@@ -229,6 +231,9 @@ class RarePathMiner:
 
                     # Internal C2 beacon: network edge with C2 indicators
                     if etype == "network" and not is_exfil and not is_data_transfer:
+                        # CIDR notation targets are scans, not C2
+                        if "/" in neighbor:
+                            continue
                         chain = self._path_to_chain(
                             graph, [node, neighbor],
                             [(node, neighbor, etype, key)],

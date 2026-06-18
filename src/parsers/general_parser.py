@@ -391,7 +391,7 @@ class GeneralSecurityLogParser(LogParser):
             event_type = "process_create"
         elif "lsass" in text_lower or "credential dump" in text_lower or "procdump" in text_lower:
             event_type = "process_create"
-        elif "smb enumeration" in text_lower or "port scan" in text_lower:
+        elif "smb enumeration" in text_lower or "port scan" in text_lower or "scan port" in text_lower or "syn scan" in text_lower:
             event_type = "network_connect"
         elif "c2 beacon" in text_lower or "cobalt strike" in text_lower or "beacon interval" in text_lower:
             event_type = "network_connect"

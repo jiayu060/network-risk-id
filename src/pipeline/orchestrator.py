@@ -226,7 +226,9 @@ class PipelineOrchestrator:
                 ev["reasons"].append(f"中流量外传({bo/1e6:.0f}MB)")
             if any(kw in raw for kw in ("steganography", "encrypted archive", "data exfil",
                                          "database dump", "sql exfil", "exfiltration",
-                                         "email exfil", "smtp outbound", "attachment")):
+                                         "email exfil", "smtp outbound", "attachment",
+                                         "sftp upload", "file upload", "file transfer",
+                                         "data export", "data transfer")):
                 ev["score"] += 0.8
                 ev["reasons"].append("数据外泄特征")
 

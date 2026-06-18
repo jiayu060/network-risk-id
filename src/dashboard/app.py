@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 st.set_page_config(page_title="网络风险识别", page_icon="🛡️", layout="wide",
                    initial_sidebar_state="expanded")
 
-__version__ = "0.3.2"  # deterministic seed + raw-message edge fallback + debug panel
+__version__ = "0.3.3"  # fix schtasks persistence, DNS duplicate, CIDR scan, SFTP exfil
 
 # ============================================================
 # Chinese Labels

@@ -88,6 +88,11 @@ class TemporalGraph:
                 edge_label = "file"
             elif edge_type == "waf_alert":
                 edge_label = "http"
+            # SFTP/file upload → file edge for data exfil detection
+            elif raw_lower and any(kw in raw_lower for kw in (
+                    "sftp upload", "sftp download", "file upload", "file transfer",
+                    "data export", "data transfer", "database dump")):
+                edge_label = "file"
             elif raw_lower and any(kw in raw_lower for kw in (
                     "sam", "system\\config", "ntds.dit", "memory.dmp", "lsass",
                     "credential", "kdbx", "shadow_copy", "mimikatz")):
@@ -97,7 +102,7 @@ class TemporalGraph:
                     "timestomp", "log tamper")):
                 edge_label = "anti_forensics"
             elif raw_lower and any(kw in raw_lower for kw in (
-                    "startup", "schtasks", "start menu\\programs\\startup",
+                    "start menu\\programs\\startup",
                     "persistence", "registry run", "boot execute", "printnightmare")):
                 edge_label = "persistence"
             elif raw_lower and any(kw in raw_lower for kw in (
