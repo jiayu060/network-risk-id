@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 st.set_page_config(page_title="网络风险识别", page_icon="🛡️", layout="wide",
                    initial_sidebar_state="expanded")
 
-__version__ = "0.3.4"  # per-line parse debug output
+__version__ = "0.3.5"  # default general parser + smart fallback + entity debug
 
 # ============================================================
 # Chinese Labels
@@ -256,6 +256,8 @@ def load_demo_data():
         "dga_results": results["dga_results"],
         "injected_attacks": injector.injected_attacks,
         "entity_count": results["entity_count"],
+        "entity_list": results.get("entity_list", []),
+        "entity_scores_raw": results.get("entity_scores_raw", {}),
         "edge_summary": dict(edge_summary),
         "source": "demo",
     }
@@ -291,6 +293,8 @@ def run_pipeline_on_records(records: list[dict]):
         "dga_results": results["dga_results"],
         "injected_attacks": ground_truth,
         "entity_count": results["entity_count"],
+        "entity_list": results.get("entity_list", []),
+        "entity_scores_raw": results.get("entity_scores_raw", {}),
         "edge_summary": dict(edge_summary),
         "source": "imported",
     }
@@ -345,35 +349,45 @@ def _extract_ground_truth(records: list[dict]) -> list:
 def parse_log_text(log_text: str, source_type: str) -> list[dict]:
     """Parse a log text string into structured records. Auto-fallback to general parser."""
     from src.parsers.parser_registry import ParserRegistry
-    parser = ParserRegistry.get_parser(source_type)
-    records = []
-    for line in log_text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            r = parser.parse_line(line)
-            if r and r.get("src_ip") and r["src_ip"] != "unknown":
-                records.append(r)
-        except Exception:
-            pass
 
-    # If the specific parser failed to extract useful records, auto-fallback to general
-    if len(records) == 0 and source_type != "general":
-        try:
-            general = ParserRegistry.get_parser("general")
-            for line in log_text.splitlines():
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    r = general.parse_line(line)
-                    if r and r.get("src_ip") and r["src_ip"] != "unknown":
-                        records.append(r)
-                except Exception:
-                    pass
-        except Exception:
-            pass
+    def _try_parse(parser) -> list[dict]:
+        recs = []
+        for line in log_text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                r = parser.parse_line(line)
+                if r and r.get("src_ip") and r["src_ip"] != "unknown":
+                    recs.append(r)
+            except Exception:
+                pass
+        return recs
+
+    parser = ParserRegistry.get_parser(source_type)
+    records = _try_parse(parser)
+
+    # If the specific parser failed or produced low-quality results, fall back to general
+    if source_type != "general":
+        unique_events = len(set(r.get("event_type") for r in records))
+        has_domains = sum(1 for r in records if r.get("domain"))
+        has_bytes = sum(1 for r in records if r.get("bytes_out"))
+
+        # Heuristic: poor parse quality → try general parser
+        quality = unique_events + (1 if has_domains > 0 else 0) + (1 if has_bytes > 0 else 0)
+
+        if len(records) == 0 or quality <= 2:
+            try:
+                general = ParserRegistry.get_parser("general")
+                gen_records = _try_parse(general)
+                gen_unique = len(set(r.get("event_type") for r in gen_records))
+                gen_domains = sum(1 for r in gen_records if r.get("domain"))
+                gen_bytes = sum(1 for r in gen_records if r.get("bytes_out"))
+                gen_quality = gen_unique + (1 if gen_domains > 0 else 0) + (1 if gen_bytes > 0 else 0)
+                if gen_quality > quality:
+                    records = gen_records
+            except Exception:
+                pass
 
     return records
 
@@ -721,8 +735,9 @@ if page == "📁 日志导入与分析":
         with c2:
             source_type = st.selectbox(
                 "日志格式",
-                ["syslog", "dns", "waf", "etw", "general"],
+                ["general", "syslog", "dns", "waf", "etw"],
                 format_func=lambda x: {
+                    "general": "通用安全日志 (自动识别)",
                     "syslog": "Syslog (RFC 3164/5424)",
                     "dns": "DNS (BIND/Unbound)",
                     "waf": "WAF (Cloudflare/ModSecurity)",
@@ -768,8 +783,14 @@ if page == "📁 日志导入与分析":
     with mode_tab2:
         paste_source = st.selectbox(
             "日志格式",
-            ["syslog", "dns", "waf", "etw", "general"],
-            format_func=lambda x: x.upper(),
+            ["general", "syslog", "dns", "waf", "etw"],
+            format_func=lambda x: {
+                "general": "通用安全日志 (自动识别)",
+                "syslog": "Syslog (RFC 3164/5424)",
+                "dns": "DNS (BIND/Unbound)",
+                "waf": "WAF (Cloudflare/ModSecurity)",
+                "etw": "ETW/EVTX (Windows事件)"
+            }.get(x, x.upper()),
             key="paste_source_type"
         )
 
@@ -893,22 +914,30 @@ if page == "📁 日志导入与分析":
 
     # Debug panel: show parsed records and graph edge types
     with st.expander("🔧 调试信息 — 解析记录与图边类型", expanded=False):
+        # Show source type that was actually used
+        used_source = st.session_state.get("source_type", "unknown")
+        st.caption(f"使用解析器: **{used_source}** | 版本: {__version__}")
+
         # Show raw input if available
         raw_input = st.session_state.get("raw_log_input", "")
         if raw_input:
             st.markdown("**原始输入日志:**")
             st.code(raw_input[:5000], language=None)
-            # Show line-by-line parse status
-            from src.parsers.general_parser import GeneralSecurityLogParser as GSLP
-            gp = GSLP()
-            st.markdown("**逐行解析状态:**")
+            # Show line-by-line parse status using the ACTUAL parser
+            from src.parsers.parser_registry import ParserRegistry
+            try:
+                debug_parser = ParserRegistry.get_parser(used_source)
+            except Exception:
+                from src.parsers.general_parser import GeneralSecurityLogParser as GSLP
+                debug_parser = GSLP()
+            st.markdown(f"**逐行解析状态 (解析器: {used_source}):**")
             parse_lines = []
             for i, line in enumerate(raw_input.strip().split('\n'), 1):
                 line = line.strip()
                 if not line:
                     continue
                 try:
-                    r = gp.parse_line(line)
+                    r = debug_parser.parse_line(line)
                     if r:
                         evt = r.get('event_type', '?')
                         src = r.get('src_ip', '?')
