@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 st.set_page_config(page_title="网络风险识别", page_icon="🛡️", layout="wide",
                    initial_sidebar_state="expanded")
 
-__version__ = "0.3.6"  # wrapped-line joining + ARP欺骗/可疑活动 label mapping
+__version__ = "0.3.7"  # ARP欺骗 display label in CHAIN_LABELS
 
 # ============================================================
 # Chinese Labels
@@ -35,7 +35,7 @@ CHAIN_LABELS = {
     "credential_theft": "凭据窃取", "privilege_escalation": "权限提升",
     "supply_chain": "供应链攻击", "suspicious_activity": "可疑活动",
     "anti_forensics": "反取证活动", "persistence": "持久化",
-    "mitm_attack": "中间人攻击", "tool_download": "工具下载",
+    "mitm_attack": "中间人攻击/ARP欺骗", "tool_download": "工具下载",
     "internal_recon": "内部侦察",
     "brute_force": "暴力破解",
 }
