@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 st.set_page_config(page_title="网络风险识别", page_icon="🛡️", layout="wide",
                    initial_sidebar_state="expanded")
 
-__version__ = "0.3.3"  # fix schtasks persistence, DNS duplicate, CIDR scan, SFTP exfil
+__version__ = "0.3.4"  # per-line parse debug output
 
 # ============================================================
 # Chinese Labels
@@ -898,6 +898,30 @@ if page == "📁 日志导入与分析":
         if raw_input:
             st.markdown("**原始输入日志:**")
             st.code(raw_input[:5000], language=None)
+            # Show line-by-line parse status
+            from src.parsers.general_parser import GeneralSecurityLogParser as GSLP
+            gp = GSLP()
+            st.markdown("**逐行解析状态:**")
+            parse_lines = []
+            for i, line in enumerate(raw_input.strip().split('\n'), 1):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    r = gp.parse_line(line)
+                    if r:
+                        evt = r.get('event_type', '?')
+                        src = r.get('src_ip', '?')
+                        dst = str(r.get('dst_ip', '?'))
+                        bo = r.get('bytes_out') or 0
+                        ok = (r.get("src_ip") and r["src_ip"] != "unknown")
+                        status = "OK" if ok else "NO_SRC"
+                        parse_lines.append(f"[{status}] L{i}: evt={evt:20s} src={src:16s} dst={dst:22s} bytes={bo}")
+                    else:
+                        parse_lines.append(f"[FAIL] L{i}: parse_line returned None")
+                except Exception as exc:
+                    parse_lines.append(f"[EXC] L{i}: {exc}")
+            st.code('\n'.join(parse_lines), language=None)
 
         records = res.get("records", [])
         if records:
